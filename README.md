@@ -172,6 +172,38 @@ Remove all models for a specific component:
 # ./cli embedding-model tei remove-all-models
 ```
 
+## GPU Model Scaling (Cost Savings)
+
+The CLI provides commands to scale GPU model deployments for cost savings. When scaled to 0, Karpenter will terminate the GPU nodes.
+
+### Check Status
+
+View the current state of GPU model deployments:
+
+```bash
+./cli gpu-models status
+```
+
+### Scale Down
+
+Scale all GPU model deployments to 0 replicas to save costs:
+
+```bash
+./cli gpu-models scale-down
+```
+
+Note: LiteLLM and OpenWebUI will remain running, but requests to self-hosted models will fail. Bedrock/external models continue to work.
+
+### Scale Up
+
+Scale GPU model deployments back to 1 replica:
+
+```bash
+./cli gpu-models scale-up
+```
+
+Note: Models take 3-5 minutes to be ready while Karpenter provisions GPU nodes and model weights are loaded. The command will display kubectl commands to check loading progress.
+
 ## Cleanup
 
 There are two methods to clean up your environment:

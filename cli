@@ -7,6 +7,7 @@ import fs from "fs";
 import { Command } from "commander";
 import inquirer from "inquirer";
 import _ from "lodash";
+import { $ } from "zx";
 import utils from "./utils.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -335,6 +336,107 @@ async function addTerraformCommands() {
   }
 }
 await addTerraformCommands();
+
+// GPU Models scaling commands for cost savings
+async function addGpuModelsCommands() {
+  const gpuModelsCommand = program
+    .command("gpu-models")
+    .description("Manage GPU model deployments for cost savings")
+    .addHelpCommand(false);
+
+  const modelNamespaces = ["vllm", "sglang", "tgi", "ollama"];
+
+  gpuModelsCommand
+    .command("scale-down")
+    .description("Scale down all GPU model deployments to 0 replicas")
+    .addHelpCommand(false)
+    .action(async () => {
+      try {
+        await utils.setK8sContext();
+        console.log("Scaling down GPU model deployments...\n");
+        console.log("Note: LiteLLM/OpenWebUI remain running but self-hosted model requests will fail.\n");
+        for (const ns of modelNamespaces) {
+          try {
+            const result = await $`kubectl get deployments -n ${ns} -o name`.quiet();
+            const deployments = result.stdout.trim().split('\n').filter(d => d);
+            for (const deployment of deployments) {
+              console.log(`Scaling ${deployment} in ${ns} to 0...`);
+              await $`kubectl scale ${deployment} -n ${ns} --replicas=0`;
+            }
+          } catch (e) {
+            // Namespace may not exist, skip silently
+          }
+        }
+        console.log("\nGPU model deployments scaled down.");
+      } catch (error) {
+        console.error("Error scaling down GPU models:", error);
+        process.exit(1);
+      }
+    });
+
+  gpuModelsCommand
+    .command("scale-up")
+    .description("Scale up all GPU model deployments to 1 replica")
+    .addHelpCommand(false)
+    .action(async () => {
+      try {
+        await utils.setK8sContext();
+        console.log("Scaling up GPU model deployments...\n");
+        const scaledDeployments = [];
+        for (const ns of modelNamespaces) {
+          try {
+            const result = await $`kubectl get deployments -n ${ns} -o name`.quiet();
+            const deployments = result.stdout.trim().split('\n').filter(d => d);
+            for (const deployment of deployments) {
+              console.log(`Scaling ${deployment} in ${ns} to 1...`);
+              await $`kubectl scale ${deployment} -n ${ns} --replicas=1`;
+              scaledDeployments.push({ deployment: deployment.replace('deployment.apps/', ''), namespace: ns });
+            }
+          } catch (e) {
+            // Namespace may not exist, skip silently
+          }
+        }
+        console.log("\nGPU model deployments scaled up.");
+        if (scaledDeployments.length > 0) {
+          console.log("\nNote: Models may take 3-5 minutes to be ready while:");
+          console.log("  1. Karpenter provisions GPU nodes");
+          console.log("  2. Model weights are loaded into GPU memory");
+          console.log("\nTo check status: ./cli gpu-models status");
+          console.log("\nTo check model loading logs:");
+          for (const { deployment, namespace } of scaledDeployments) {
+            console.log(`  kubectl logs -n ${namespace} deploy/${deployment} -f`);
+          }
+        }
+      } catch (error) {
+        console.error("Error scaling up GPU models:", error);
+        process.exit(1);
+      }
+    });
+
+  gpuModelsCommand
+    .command("status")
+    .description("Show status of GPU model deployments")
+    .addHelpCommand(false)
+    .action(async () => {
+      try {
+        await utils.setK8sContext();
+        console.log("GPU Model Deployment Status:\n");
+        for (const ns of modelNamespaces) {
+          try {
+            console.log(`=== ${ns} ===`);
+            await $`kubectl get deployments -n ${ns} -o wide`;
+            console.log("");
+          } catch (e) {
+            console.log(`(namespace ${ns} not found)\n`);
+          }
+        }
+      } catch (error) {
+        console.error("Error getting GPU model status:", error);
+        process.exit(1);
+      }
+    });
+}
+await addGpuModelsCommands();
 
 program
   .command("cleanup-everything")
