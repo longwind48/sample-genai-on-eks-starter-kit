@@ -76,6 +76,31 @@ variable "github_token" {
   sensitive   = true
 }
 
+# Cost Allocation Tags
+variable "tag_owner" {
+  type        = string
+  description = "Team or individual responsible for the resources"
+  default     = ""
+}
+
+variable "tag_cost_center" {
+  type        = string
+  description = "Cost center for billing"
+  default     = ""
+}
+
+variable "tag_project" {
+  type        = string
+  description = "Project name"
+  default     = ""
+}
+
+variable "tag_environment" {
+  type        = string
+  description = "Environment (dev/staging/prod)"
+  default     = ""
+}
+
 locals {
   account_id = data.aws_caller_identity.current.account_id
 }
@@ -111,4 +136,16 @@ terraform {
   }
 }
 
-provider "aws" { region = var.region }
+provider "aws" {
+  region = var.region
+
+  default_tags {
+    tags = {
+      Owner       = var.tag_owner
+      CostCenter  = var.tag_cost_center
+      Project     = var.tag_project
+      Environment = var.tag_environment
+      ManagedBy   = "terraform"
+    }
+  }
+}
