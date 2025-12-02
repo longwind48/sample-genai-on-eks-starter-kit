@@ -7,6 +7,9 @@ langfuse:
   salt:
     value: salt
   nextauth:
+    {{#if LANGFUSE_URL}}
+    url: "{{{LANGFUSE_URL}}}"
+    {{/if}}
     secret:
       value: secret
   encryptionKey:
