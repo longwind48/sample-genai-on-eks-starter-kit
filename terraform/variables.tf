@@ -67,6 +67,12 @@ variable "tag_environment" {
   default     = ""
 }
 
+variable "tag_auto_delete" {
+  type        = string
+  description = "Auto-delete flag (yes/no)"
+  default     = "no"
+}
+
 locals {
   account_id = data.aws_caller_identity.current.account_id
 }
@@ -111,6 +117,7 @@ provider "aws" {
       CostCenter  = var.tag_cost_center
       Project     = var.tag_project
       Environment = var.tag_environment
+      AutoDelete  = var.tag_auto_delete
       ManagedBy   = "terraform"
     }
   }
