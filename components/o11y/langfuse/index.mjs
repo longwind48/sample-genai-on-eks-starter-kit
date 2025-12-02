@@ -35,6 +35,20 @@ export async function install() {
   const valuesRenderedPath = path.join(DIR, "values.rendered.yaml");
   const valuesTemplateString = fs.readFileSync(valuesTemplatePath, "utf8");
   const valuesTemplate = handlebars.compile(valuesTemplateString);
+  // Get Langfuse URL from env or terraform CloudFront output
+  let langfuseUrl = process.env.LANGFUSE_URL;
+  if (!langfuseUrl) {
+    try {
+      const TERRAFORM_DIR = path.join(BASE_DIR, "terraform");
+      const allOutputs = await utils.terraform.output(TERRAFORM_DIR, {});
+      if (allOutputs?.cloudfront_urls?.value?.langfuse) {
+        langfuseUrl = allOutputs.cloudfront_urls.value.langfuse;
+      }
+    } catch (e) {
+      // CloudFront not configured, skip
+    }
+  }
+
   const valuesVars = {
     DOMAIN: process.env.DOMAIN,
     LANGFUSE_USERNAME: process.env.LANGFUSE_USERNAME,
@@ -42,6 +56,7 @@ export async function install() {
     LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,
     LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY,
     LANGFUSE_BUCKET_NAME: langfuseBucketName,
+    LANGFUSE_URL: langfuseUrl,
     AWS_REGION: process.env.AWS_REGION,
   };
   fs.writeFileSync(valuesRenderedPath, valuesTemplate(valuesVars));
