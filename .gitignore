@@ -17,8 +17,10 @@ __pycache__/
 .backup/
 .temp/
 .kubeconfig
+.env
 .env.local
 config.local.json
+CLAUDE.local.md
 *.rendered.yaml
 test*.py
 test*.mjs
