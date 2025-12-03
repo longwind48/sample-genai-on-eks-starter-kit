@@ -117,7 +117,7 @@ provider "aws" {
       CostCenter  = var.tag_cost_center
       Project     = var.tag_project
       Environment = var.tag_environment
-      AutoDelete  = var.tag_auto_delete
+      auto-delete = var.tag_auto_delete
       ManagedBy   = "terraform"
     }
   }
