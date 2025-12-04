@@ -47,6 +47,10 @@ locals {
       alb_dns_name = try(local.alb_by_stack["ingress-nginx/qdrant-alb"], "")
       description  = "Qdrant Vector DB"
     }
+    n8n = {
+      alb_dns_name = try(local.alb_by_stack["n8n/n8n"], "")
+      description  = "n8n Workflow Automation"
+    }
   } : {}
 
   # Filter out services without ALBs

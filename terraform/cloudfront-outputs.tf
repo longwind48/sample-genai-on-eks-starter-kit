@@ -36,3 +36,8 @@ output "qdrant_url" {
   description = "Qdrant HTTPS URL"
   value       = local.enable_cloudfront && contains(keys(local.available_services), "qdrant") ? "https://${aws_cloudfront_distribution.services["qdrant"].domain_name}" : null
 }
+
+output "n8n_url" {
+  description = "n8n Workflow Automation HTTPS URL"
+  value       = local.enable_cloudfront && contains(keys(local.available_services), "n8n") ? "https://${aws_cloudfront_distribution.services["n8n"].domain_name}" : null
+}
