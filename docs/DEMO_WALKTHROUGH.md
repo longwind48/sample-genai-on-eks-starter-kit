@@ -40,3 +40,30 @@ Access Open WebUI at `openwebui.<DOMAIN>` and then:
 3. Access Langfuse dashboard at `langfuse.<DOMAIN>` (check `LANGFUSE_USERNAME` and `LANGFUSE_PASSWORD` on `.env.local` for Email and Password):
    - Check [Feature Overview](https://langfuse.com/docs/core-features) to explore some of the features
    - [LiteLLM Proxy logging integration with Langfuse](https://docs.litellm.ai/docs/proxy/logging#langfuse) is already configured
+
+### Optional Components
+
+#### n8n Workflow Automation
+
+To deploy n8n for workflow automation:
+
+```bash
+./cli workflow-automation n8n install
+```
+
+Then apply Terraform to create the CloudFront distribution:
+
+```bash
+cd terraform
+terraform apply -var-file=workspaces/<REGION>/terraform.tfvars
+```
+
+Access n8n at:
+
+- With domain: `n8n.<DOMAIN>`
+- Without domain: Run `terraform output n8n_url` to get the CloudFront URL
+
+Check [n8n Documentation](https://docs.n8n.io) to explore workflow automation features including:
+
+- [AI Agent workflows](https://docs.n8n.io/integrations/builtin/cluster-nodes/root-nodes/n8n-nodes-langchain.agent/)
+- [HTTP Request nodes](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.httprequest/) to integrate with LiteLLM API
