@@ -19,11 +19,7 @@ spec:
       automountServiceAccountToken: false
       nodeSelector:
         kubernetes.io/arch: amd64
-        # karpenter.sh/capacity-type: on-demand
-        # {{{KARPENTER_PREFIX}}}/instance-category: m
-        # {{{KARPENTER_PREFIX}}}/instance-generation: "7"
-        {{{KARPENTER_PREFIX}}}/instance-family: r7i
-        # node.kubernetes.io/instance-type: r7i.xlarge
+        # Removed r7i constraint - allows scheduling on smaller instances
       containers:
         - name: tei
           image: {{GHCR_IMAGE_PREFIX}}huggingface/text-embeddings-inference:cpu-1.8.2
@@ -50,11 +46,11 @@ spec:
               containerPort: 80
           resources:
             requests:
-              cpu: 3.6 #90%
-              memory: 29Gi #90%
+              cpu: 500m
+              memory: 4Gi
             limits:
-              cpu: 3.6 #90%
-              memory: 29Gi #90%
+              cpu: 2000m
+              memory: 6Gi
           volumeMounts:
             - name: huggingface-cache
               mountPath: /root/.cache/huggingface
@@ -67,7 +63,7 @@ spec:
         - name: shm
           emptyDir:
             medium: Memory
-            sizeLimit: 10Gi
+            sizeLimit: 2Gi
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
