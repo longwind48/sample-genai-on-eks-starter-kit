@@ -442,3 +442,49 @@ resource "helm_release" "lws" {
 
   depends_on = [module.eks_blueprints_addons_core]
 }
+
+
+# MCP Proxy for AgentCore
+resource "aws_iam_role" "mcp_proxy" {
+  name = "${module.eks.cluster_name}-${var.region}-mcp-proxy"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "pods.eks.amazonaws.com"
+        }
+        Action = [
+          "sts:AssumeRole",
+          "sts:TagSession"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "mcp_proxy_agentcore" {
+  name = "agentcore-invoke"
+  role = aws_iam_role.mcp_proxy.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:InvokeAgentRuntime"
+        ]
+        Resource = "arn:aws:bedrock-agentcore:*:*:runtime/*"
+      }
+    ]
+  })
+}
+
+resource "aws_eks_pod_identity_association" "mcp_proxy" {
+  cluster_name    = module.eks.cluster_name
+  namespace       = "openwebui"
+  service_account = "mcp-proxy"
+  role_arn        = aws_iam_role.mcp_proxy.arn
+}

@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcp-proxy
+  namespace: openwebui
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-proxy
+  namespace: openwebui
+  labels:
+    app: mcp-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-proxy
+  template:
+    metadata:
+      labels:
+        app: mcp-proxy
+    spec:
+      serviceAccountName: mcp-proxy
+      containers:
+        - name: mcp-proxy
+          image: python:3.12-slim
+          command:
+            - /bin/sh
+            - -c
+            - |
+              pip install mcp-proxy mcp-proxy-for-aws boto3 --quiet
+              
+              # Fetch credentials from EKS Pod Identity and write to file
+              python3 << 'EOF'
+              import boto3
+              import os
+              session = boto3.Session()
+              creds = session.get_credentials().get_frozen_credentials()
+              with open('/tmp/aws_creds.sh', 'w') as f:
+                  f.write(f"export AWS_ACCESS_KEY_ID={creds.access_key}\n")
+                  f.write(f"export AWS_SECRET_ACCESS_KEY={creds.secret_key}\n")
+                  if creds.token:
+                      f.write(f"export AWS_SESSION_TOKEN={creds.token}\n")
+              EOF
+              
+              . /tmp/aws_creds.sh
+              export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+              
+              ENCODED_ARN=$(echo "$AGENTCORE_RUNTIME_ARN" | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe=''))")
+              ENDPOINT_URL="https://bedrock-agentcore.${AWS_REGION}.amazonaws.com/runtimes/${ENCODED_ARN}/invocations?qualifier=DEFAULT"
+              echo "Starting MCP Proxy for: $ENDPOINT_URL"
+              mcp-proxy --host 0.0.0.0 --port 8080 --allow-origin "*" \
+                --pass-environment \
+                -- mcp-proxy-for-aws "$ENDPOINT_URL" --service bedrock-agentcore --region "$AWS_REGION" --timeout 300
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: AWS_REGION
+              value: "us-east-1"
+            - name: AGENTCORE_RUNTIME_ARN
+              value: "arn:aws:bedrock-agentcore:us-east-1:739907928487:runtime/hosted_agent_eq97r-L7DvQ9Ffu0"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-proxy
+  namespace: openwebui
+spec:
+  selector:
+    app: mcp-proxy
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  type: ClusterIP
