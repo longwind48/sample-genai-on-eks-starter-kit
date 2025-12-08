@@ -29,27 +29,15 @@ spec:
             - /bin/sh
             - -c
             - |
-              pip install mcp-proxy mcp-proxy-for-aws boto3 --quiet
-              
-              # Fetch credentials from EKS Pod Identity and write to file
-              python3 << 'EOF'
-              import boto3
-              import os
-              session = boto3.Session()
-              creds = session.get_credentials().get_frozen_credentials()
-              with open('/tmp/aws_creds.sh', 'w') as f:
-                  f.write(f"export AWS_ACCESS_KEY_ID={creds.access_key}\n")
-                  f.write(f"export AWS_SECRET_ACCESS_KEY={creds.secret_key}\n")
-                  if creds.token:
-                      f.write(f"export AWS_SESSION_TOKEN={creds.token}\n")
-              EOF
-              
-              . /tmp/aws_creds.sh
-              export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-              
+              pip install mcp-proxy mcp-proxy-for-aws --quiet
+
+              # URL-encode the ARN for the endpoint
               ENCODED_ARN=$(echo "$AGENTCORE_RUNTIME_ARN" | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe=''))")
               ENDPOINT_URL="https://bedrock-agentcore.${AWS_REGION}.amazonaws.com/runtimes/${ENCODED_ARN}/invocations?qualifier=DEFAULT"
               echo "Starting MCP Proxy for: $ENDPOINT_URL"
+
+              # Let mcp-proxy-for-aws use Pod Identity credentials directly (auto-refresh)
+              # Do NOT export AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY - they override Pod Identity
               mcp-proxy --host 0.0.0.0 --port 8080 --allow-origin "*" \
                 --pass-environment \
                 -- mcp-proxy-for-aws "$ENDPOINT_URL" --service bedrock-agentcore --region "$AWS_REGION" --timeout 300
