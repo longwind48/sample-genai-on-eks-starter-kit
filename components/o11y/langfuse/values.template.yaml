@@ -29,6 +29,9 @@ langfuse:
         host: langfuse.{{{DOMAIN}}}
         {{/if}}
 
+  features:
+    signUpDisabled: true
+
   additionalEnv:
     - name: LANGFUSE_INIT_ORG_ID
       value: my-org
@@ -75,6 +78,16 @@ clickhouse:
   auth:
     password: password123
   replicaCount: 1
+  # Disable verbose system logging to prevent disk from filling up
+  # These are ClickHouse internal diagnostics, not Langfuse trace data
+  extraVolumes:
+    - name: clickhouse-config-overrides
+      configMap:
+        name: clickhouse-config-overrides
+  extraVolumeMounts:
+    - name: clickhouse-config-overrides
+      mountPath: /opt/bitnami/clickhouse/etc/config.d/disable-system-logs.xml
+      subPath: disable-system-logs.xml
   resources:
     requests:
       cpu: 1    

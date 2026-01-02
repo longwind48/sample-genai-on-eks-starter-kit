@@ -60,6 +60,43 @@ export async function install() {
     AWS_REGION: process.env.AWS_REGION,
   };
   fs.writeFileSync(valuesRenderedPath, valuesTemplate(valuesVars));
+
+  // Create ConfigMap to disable verbose ClickHouse system logging
+  // This prevents disk from filling up with internal logs (trace_log, text_log, etc.)
+  console.log("Creating ClickHouse config overrides ConfigMap...");
+  await $`kubectl create namespace langfuse --dry-run=client -o yaml | kubectl apply -f -`;
+  await $`kubectl apply -f - <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-config-overrides
+  namespace: langfuse
+data:
+  disable-system-logs.xml: |
+    <clickhouse>
+      <!-- Configure TTL for system log tables to prevent disk bloat -->
+      <!-- These are ClickHouse internal diagnostics, not Langfuse data -->
+      <trace_log>
+        <ttl>event_date + INTERVAL 1 DAY DELETE</ttl>
+      </trace_log>
+      <text_log>
+        <ttl>event_date + INTERVAL 1 DAY DELETE</ttl>
+      </text_log>
+      <metric_log>
+        <ttl>event_date + INTERVAL 1 DAY DELETE</ttl>
+      </metric_log>
+      <query_log>
+        <ttl>event_date + INTERVAL 1 DAY DELETE</ttl>
+      </query_log>
+      <asynchronous_metric_log>
+        <ttl>event_date + INTERVAL 1 DAY DELETE</ttl>
+      </asynchronous_metric_log>
+      <latency_log>
+        <ttl>event_date + INTERVAL 1 DAY DELETE</ttl>
+      </latency_log>
+    </clickhouse>
+EOF`;
+
   await $`helm upgrade --install langfuse langfuse/langfuse --namespace langfuse --create-namespace -f ${valuesRenderedPath}`;
 }
 
