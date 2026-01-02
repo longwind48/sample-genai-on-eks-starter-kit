@@ -98,6 +98,8 @@ proxy_config:
     master_key: os.environ/PROXY_MASTER_KEY
     store_model_in_db: true
     store_prompts_in_spend_logs: true
+    max_budget: 100
+    budget_duration: 30d
   litellm_settings:
     drop_params: true
     {{#with integration.o11y.config}}
