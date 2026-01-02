@@ -1,4 +1,8 @@
 nameOverride: openwebui
+
+image:
+  tag: v0.6.43
+
 ingress:
   enabled: true
   annotations:
@@ -12,9 +16,12 @@ ingress:
 
 # openaiBaseApiUrl: https://litellm.{{{DOMAIN}}}/v1
 openaiBaseApiUrl: http://litellm.litellm:4000/v1
+openaiApiKey: {{{LITELLM_API_KEY}}}
 extraEnvVars:
-  - name: OPENAI_API_KEY
-    value: {{{LITELLM_API_KEY}}}
+  - name: ENABLE_SIGNUP
+    value: "false"
+  - name: DEFAULT_USER_ROLE
+    value: "pending"
 
 ollama:
   enabled: false
