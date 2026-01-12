@@ -97,7 +97,7 @@ data:
     </clickhouse>
 EOF`;
 
-  await $`helm upgrade --install langfuse langfuse/langfuse --namespace langfuse --create-namespace -f ${valuesRenderedPath}`;
+  await $`helm upgrade --install langfuse langfuse/langfuse --namespace langfuse --create-namespace --version 1.5.16 -f ${valuesRenderedPath}`;
 }
 
 export async function uninstall() {
