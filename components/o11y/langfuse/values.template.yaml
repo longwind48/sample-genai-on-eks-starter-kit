@@ -4,6 +4,9 @@ global:
     allowInsecureImages: true
 
 langfuse:
+  # Prevent Karpenter from evicting this pod during consolidation
+  podAnnotations:
+    karpenter.sh/do-not-disrupt: "true"
   salt:
     value: salt
   nextauth:
@@ -62,7 +65,14 @@ postgresql:
     username: admin
     password: password123
   primary:
-    resources: 
+    # Prevent Karpenter from evicting this pod during consolidation
+    podAnnotations:
+      karpenter.sh/do-not-disrupt: "true"
+    # PodDisruptionBudget - prevent voluntary disruptions
+    pdb:
+      create: true
+      maxUnavailable: 0
+    resources:
       requests:
         cpu: 125m
         memory: 256Mi
@@ -78,6 +88,13 @@ clickhouse:
   auth:
     password: password123
   replicaCount: 1
+  # Prevent Karpenter from evicting this pod during consolidation
+  podAnnotations:
+    karpenter.sh/do-not-disrupt: "true"
+  # PodDisruptionBudget - prevent voluntary disruptions
+  pdb:
+    create: true
+    maxUnavailable: 0
   # Disable verbose system logging to prevent disk from filling up
   # These are ClickHouse internal diagnostics, not Langfuse trace data
   extraVolumes:
@@ -91,10 +108,10 @@ clickhouse:
   resources:
     requests:
       cpu: 1
-      memory: 6Gi
+      memory: 10Gi
       ephemeral-storage: 50Mi
     limits:
-      memory: 6Gi
+      memory: 10Gi
       ephemeral-storage: 2Gi
   zookeeper:
     image:
@@ -103,9 +120,16 @@ clickhouse:
       tag: 3.9.3-debian-12-r8
       pullPolicy: IfNotPresent
     replicaCount: 1
-    resources: 
+    # Prevent Karpenter from evicting this pod during consolidation
+    podAnnotations:
+      karpenter.sh/do-not-disrupt: "true"
+    # PodDisruptionBudget - prevent voluntary disruptions
+    pdb:
+      create: true
+      maxUnavailable: 0
+    resources:
       requests:
-        cpu: 250m    
+        cpu: 250m
         memory: 384Mi
         ephemeral-storage: 50Mi
       limits:
@@ -121,7 +145,14 @@ redis:
   auth:
     password: password123
   primary:
-    resources: 
+    # Prevent Karpenter from evicting this pod during consolidation
+    podAnnotations:
+      karpenter.sh/do-not-disrupt: "true"
+    # PodDisruptionBudget - prevent voluntary disruptions
+    pdb:
+      create: true
+      maxUnavailable: 0
+    resources:
       requests:
         cpu: 125m
         memory: 256Mi
