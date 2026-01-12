@@ -43,6 +43,55 @@ spec:
   depends_on = [module.eks]
 }
 
+# Stateful workloads NodePool - on-demand only for database stability
+resource "kubectl_manifest" "karpenter_nodepool_stateful" {
+  yaml_body = <<-YAML
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: stateful
+spec:
+  weight: 100
+  limits:
+    cpu: 20
+  disruption:
+    budgets:
+      - nodes: "0"
+    consolidateAfter: Never
+    consolidationPolicy: WhenEmpty
+  template:
+    spec:
+      expireAfter: 480h
+      nodeClassRef:
+        group: eks.amazonaws.com
+        kind: NodeClass
+        name: default
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        - key: eks.amazonaws.com/instance-category
+          operator: In
+          values: ["c", "m", "r"]
+        - key: eks.amazonaws.com/instance-generation
+          operator: Gt
+          values: ["4"]
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64", "arm64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+      terminationGracePeriod: 24h0m0s
+      taints:
+        - key: workload-type
+          value: stateful
+          effect: NoSchedule
+  YAML
+
+  depends_on = [module.eks]
+}
+
 resource "kubectl_manifest" "karpenter_nodepool_gpu" {
   yaml_body = <<-YAML
 apiVersion: karpenter.sh/v1

@@ -72,6 +72,14 @@ postgresql:
     pdb:
       create: true
       maxUnavailable: 0
+    # Schedule on on-demand nodes for stability
+    tolerations:
+      - key: workload-type
+        operator: Equal
+        value: stateful
+        effect: NoSchedule
+    nodeSelector:
+      karpenter.sh/capacity-type: on-demand
     resources:
       requests:
         cpu: 125m
@@ -95,6 +103,14 @@ clickhouse:
   pdb:
     create: true
     maxUnavailable: 0
+  # Schedule on on-demand nodes for stability
+  tolerations:
+    - key: workload-type
+      operator: Equal
+      value: stateful
+      effect: NoSchedule
+  nodeSelector:
+    karpenter.sh/capacity-type: on-demand
   # Disable verbose system logging to prevent disk from filling up
   # These are ClickHouse internal diagnostics, not Langfuse trace data
   extraVolumes:
@@ -127,6 +143,14 @@ clickhouse:
     pdb:
       create: true
       maxUnavailable: 0
+    # Schedule on on-demand nodes for stability
+    tolerations:
+      - key: workload-type
+        operator: Equal
+        value: stateful
+        effect: NoSchedule
+    nodeSelector:
+      karpenter.sh/capacity-type: on-demand
     resources:
       requests:
         cpu: 250m
@@ -134,7 +158,7 @@ clickhouse:
         ephemeral-storage: 50Mi
       limits:
         memory: 384Mi
-        ephemeral-storage: 2Gi 
+        ephemeral-storage: 2Gi
 
 redis:
   image:
@@ -152,6 +176,14 @@ redis:
     pdb:
       create: true
       maxUnavailable: 0
+    # Schedule on on-demand nodes for stability
+    tolerations:
+      - key: workload-type
+        operator: Equal
+        value: stateful
+        effect: NoSchedule
+    nodeSelector:
+      karpenter.sh/capacity-type: on-demand
     resources:
       requests:
         cpu: 125m
