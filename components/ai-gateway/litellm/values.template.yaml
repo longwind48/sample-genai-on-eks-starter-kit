@@ -24,7 +24,18 @@ redis:
     tag: 8.2.1-debian-12-r0
     pullPolicy: IfNotPresent
   master:
-    resources: 
+    # Prevent Karpenter from evicting this pod during consolidation
+    podAnnotations:
+      karpenter.sh/do-not-disrupt: "true"
+    # Schedule on on-demand nodes for stability
+    tolerations:
+      - key: workload-type
+        operator: Equal
+        value: stateful
+        effect: NoSchedule
+    nodeSelector:
+      karpenter.sh/capacity-type: on-demand
+    resources:
       requests:
         cpu: 125m
         memory: 256Mi
@@ -38,7 +49,18 @@ postgresql:
     tag: 17.5.0-debian-12-r8
     pullPolicy: IfNotPresent
   primary:
-    resources: 
+    # Prevent Karpenter from evicting this pod during consolidation
+    podAnnotations:
+      karpenter.sh/do-not-disrupt: "true"
+    # Schedule on on-demand nodes for stability
+    tolerations:
+      - key: workload-type
+        operator: Equal
+        value: stateful
+        effect: NoSchedule
+    nodeSelector:
+      karpenter.sh/capacity-type: on-demand
+    resources:
       requests:
         cpu: 125m
         memory: 256Mi
@@ -95,6 +117,8 @@ proxy_config:
     master_key: os.environ/PROXY_MASTER_KEY
     store_model_in_db: true
     store_prompts_in_spend_logs: true
+    max_budget: 100
+    budget_duration: 30d
   litellm_settings:
     {{#with integration.o11y.config}}
     {{#if callbacks}}    

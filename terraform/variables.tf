@@ -46,25 +46,25 @@ variable "enable_lws" {
 variable "tag_owner" {
   type        = string
   description = "Team or individual responsible for the resources"
-  default     = ""
+  default     = "ml-platform-team"
 }
 
 variable "tag_cost_center" {
   type        = string
   description = "Cost center for billing"
-  default     = ""
+  default     = "engineering"
 }
 
 variable "tag_project" {
   type        = string
   description = "Project name"
-  default     = ""
+  default     = "flexAI"
 }
 
 variable "tag_environment" {
   type        = string
   description = "Environment (dev/staging/prod)"
-  default     = ""
+  default     = "dev"
 }
 
 variable "tag_auto_delete" {
