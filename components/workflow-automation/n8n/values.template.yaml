@@ -2,11 +2,10 @@ ingress:
   enabled: true
   annotations:
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/scheme: internet-facing
 {{#if DOMAIN}}
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
 {{/if}}
-  className: internet-facing-alb
+  className: {{#if DOMAIN}}shared-internet-facing-alb{{else}}internal-alb{{/if}}
   hosts:
 {{#if DOMAIN}}
     - host: n8n.{{{DOMAIN}}}
