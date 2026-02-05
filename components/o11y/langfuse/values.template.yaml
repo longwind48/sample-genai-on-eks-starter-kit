@@ -7,6 +7,14 @@ langfuse:
   # Prevent Karpenter from evicting this pod during consolidation
   podAnnotations:
     karpenter.sh/do-not-disrupt: "true"
+  # Schedule on on-demand nodes for stability
+  tolerations:
+    - key: workload-type
+      operator: Equal
+      value: stateful
+      effect: NoSchedule
+  nodeSelector:
+    karpenter.sh/capacity-type: on-demand
   salt:
     value: salt
   nextauth:

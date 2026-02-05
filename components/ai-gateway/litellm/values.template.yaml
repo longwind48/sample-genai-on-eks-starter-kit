@@ -101,7 +101,7 @@ envVars:
 
 ingress:
   enabled: true
-  className: {{#if DOMAIN}}shared-{{/if}}internet-facing-alb
+  className: {{#if DOMAIN}}shared-internet-facing-alb{{else}}internal-alb{{/if}}
   annotations:
     alb.ingress.kubernetes.io/target-type: ip
     {{#if DOMAIN}}

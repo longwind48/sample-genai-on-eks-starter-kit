@@ -9,7 +9,7 @@ metadata:
   name: qdrant-alb
   namespace: ingress-nginx
 spec:
-  ingressClassName: {{#if DOMAIN}}shared-{{/if}}internet-facing-alb
+  ingressClassName: {{#if DOMAIN}}shared-internet-facing-alb{{else}}internal-alb{{/if}}
   rules:
     - http:
         paths:

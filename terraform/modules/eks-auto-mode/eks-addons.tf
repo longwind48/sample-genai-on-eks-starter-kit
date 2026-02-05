@@ -395,21 +395,21 @@ spec:
   depends_on = [kubectl_manifest.ingressclass_shared_internet_facing_alb]
 }
 
-resource "kubectl_manifest" "ingressclassparams_internet_facing_alb" {
+resource "kubectl_manifest" "ingressclassparams_internal_alb" {
   count     = var.domain == "" ? 1 : 0
   yaml_body = <<-YAML
 apiVersion: eks.amazonaws.com/v1
 kind: IngressClassParams
 metadata:
-  name: internet-facing-alb
+  name: internal-alb
 spec:
-  scheme: internet-facing
+  scheme: internal
   YAML
 
   depends_on = [module.eks_blueprints_addons_core]
 }
 
-resource "kubectl_manifest" "ingressclass_internet_facing_alb" {
+resource "kubectl_manifest" "ingressclass_internal_alb" {
   count = var.domain == "" ? 1 : 0
 
   yaml_body = <<-YAML
@@ -418,16 +418,16 @@ kind: IngressClass
 metadata:
   annotations:
     ingressclass.kubernetes.io/is-default-class: "true"
-  name: internet-facing-alb
+  name: internal-alb
 spec:
   controller: eks.amazonaws.com/alb
   parameters:
     apiGroup: eks.amazonaws.com
     kind: IngressClassParams
-    name: internet-facing-alb
+    name: internal-alb
   YAML
 
-  depends_on = [kubectl_manifest.ingressclassparams_internet_facing_alb]
+  depends_on = [kubectl_manifest.ingressclassparams_internal_alb]
 }
 
 # EBS
