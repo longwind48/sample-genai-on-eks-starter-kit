@@ -229,6 +229,26 @@ Scale GPU model deployments back to 1 replica:
 
 Note: Models take 3-5 minutes to be ready while Karpenter provisions GPU nodes and model weights are loaded. The command will display kubectl commands to check loading progress.
 
+## Accessing Services
+
+All services are deployed behind **internal ALBs** (not internet-facing), meaning they are only reachable from within the VPC. This is a security best practice to avoid exposing services like LLM gateways, observability dashboards, and vector databases directly to the public internet.
+
+To access services from your local machine, use `kubectl port-forward` via the provided Makefile:
+
+```bash
+make help          # Show all available targets
+
+make litellm       # AI Gateway        → http://localhost:4000
+make langfuse      # LLM Observability → http://localhost:3000
+make n8n           # Workflow Auto     → http://localhost:5678
+make qdrant        # Vector Database   → http://localhost:6333
+make openwebui     # Chat UI           → http://localhost:8080
+
+make list-albs     # Show all internal ALB hostnames
+```
+
+Each command opens a port-forward session — press `Ctrl+C` to stop. You can run multiple services in separate terminal tabs.
+
 ## Cleanup
 
 There are two methods to clean up your environment:
