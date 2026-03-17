@@ -312,7 +312,7 @@ For Bedrock models, the model list hardcoded on config.json.
 
 ### How can I change the EC2 GPU instance families and purchasing options?
 
-The default instance families are g6e, g6 and g5g and the default purchasing options are spot and on-demand. You can change the values on `terraform/0-common.tf` and then run `./cli terraform apply again`.
+The default instance families are g6e, g6, g5g, p5en, p5e, p5, p4de and p4d, and the default purchasing options are spot and on-demand. You can change the values on `terraform/variables.tf` (see `gpu_nodepool_instance_family` and `gpu_nodepool_capacity_type`) and then run `./cli terraform apply` again.
 
 Note that the model deployment manifests use `nodeSelector` like `eks.amazonaws.com/instance-family: g6e` to lock the specific tested instance family which you will need to adjust accordingly.
 
