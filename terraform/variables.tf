@@ -16,11 +16,11 @@ variable "eks_cluster_version" {
 }
 variable "domain" {
   type    = string
-  default = "bursting"
+  default = ""
 }
 variable "efs_throughput_mode" {
   type    = string
-  default = ""
+  default = "bursting"
 }
 variable "gpu_nodepool_capacity_type" {
   type    = list(string)
