@@ -346,6 +346,9 @@ spec:
   scheme: internet-facing
   group:
     name: shared-internet-facing-alb
+  tags:
+    - key: auto-delete
+      value: "no"
   YAML
 
   depends_on = [module.eks_blueprints_addons_core]
@@ -404,6 +407,9 @@ metadata:
   name: internal-alb
 spec:
   scheme: internal
+  tags:
+    - key: auto-delete
+      value: "no"
   YAML
 
   depends_on = [module.eks_blueprints_addons_core]
@@ -443,6 +449,7 @@ provisioner: ebs.csi.eks.amazonaws.com
 volumeBindingMode: WaitForFirstConsumer
 parameters:
   type: gp3
+  tagSpecification_1: "auto-delete=no"
   YAML
 
   ignore_fields = ["metadata.uid", "metadata.resourceVersion"]

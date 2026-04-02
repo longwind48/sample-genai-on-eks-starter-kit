@@ -33,6 +33,10 @@ module "eks" {
     node_pools = ["general-purpose"]
   }
 
+  tags = {
+    "auto-delete" = "no"
+  }
+
   # Enable ECR pull through cache for EKS Auto Mode nodes
   node_iam_role_additional_policies = {
     ECRPullThroughCache = aws_iam_policy.ecr_pull_through_cache.arn
