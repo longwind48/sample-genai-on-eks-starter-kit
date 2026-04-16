@@ -1,3 +1,5 @@
+replicaCount: 2
+
 image:
   tag: main-v1.81.3-stable
 
@@ -5,6 +7,24 @@ global:
   security:
     # -- Allow insecure images to use our ECR images.
     allowInsecureImages: true
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+pdb:
+  enabled: true
+  maxUnavailable: 1
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app: litellm
 
 {{#if @root.integration.o11y.mlflow}}
 image:
@@ -101,11 +121,13 @@ envVars:
 
 ingress:
   enabled: true
-  className: {{#if DOMAIN}}shared-internet-facing-alb{{else}}internal-alb{{/if}}
+  className: shared-internet-facing-alb
   annotations:
     alb.ingress.kubernetes.io/target-type: ip
     {{#if DOMAIN}}
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    {{else}}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
     {{/if}}
   hosts:
     - paths:
@@ -120,10 +142,17 @@ proxy_config:
     master_key: os.environ/PROXY_MASTER_KEY
     store_model_in_db: true
     store_prompts_in_spend_logs: true
-    max_budget: 100
+    max_budget: 10000
     budget_duration: 30d
   litellm_settings:
     drop_params: true
+    # Cost governance defaults
+    max_internal_user_budget: 300
+    internal_user_budget_duration: 30d
+    upperbound_key_generate_params:
+      max_budget: 300
+      budget_duration: "30d"
+      duration: "90d"
     {{#with integration.o11y.config}}
     {{#if callbacks}}
     callbacks: {{{callbacks}}}
