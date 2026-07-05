@@ -361,7 +361,7 @@ async function addGpuModelsCommands() {
     .description("Manage GPU model deployments for cost savings")
     .addHelpCommand(false);
 
-  const modelNamespaces = ["vllm", "sglang", "tgi", "ollama"];
+  const modelNamespaces = ["vllm", "sglang", "tgi", "ollama", "tei"];
 
   gpuModelsCommand
     .command("scale-down")
