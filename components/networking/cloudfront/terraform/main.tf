@@ -103,6 +103,18 @@ resource "aws_wafv2_web_acl" "litellm" {
     allow {}
   }
 
+  # LLM request bodies are large. Raise WAF body inspection from the 16KB default
+  # to the 64KB max so managed rules see the whole body; combined with the
+  # SizeRestrictions_BODY Count override below, oversized bodies pass instead of
+  # returning the CloudFront edge 403 that broke Claude Code/Cowork.
+  association_config {
+    request_body {
+      cloudfront {
+        default_size_inspection_limit = "KB_64"
+      }
+    }
+  }
+
   # AWS baseline: common OWASP-ish protections.
   rule {
     name     = "common-rules"
@@ -115,11 +127,33 @@ resource "aws_wafv2_web_acl" "litellm" {
         name        = "AWSManagedRulesCommonRuleSet"
         vendor_name = "AWS"
 
-        # LLM gateway traffic breaks two generic web-app rules:
-        # - SizeRestrictions_BODY blocks bodies >8KB; Claude Code/Cowork system
-        #   prompts + tool schemas routinely exceed that.
-        # - GenericLFI_BODY false-positives on file paths / code in prompts.
-        # Count (don't block) just these two; the rest of the set still blocks.
+        # The common rule set inspects the request body, but WAF can inspect at
+        # most 64KB and Claude Code/Cowork bodies (history + tool schemas + files)
+        # exceed that — so body rules block legitimate LLM traffic outright.
+        # Scope-down: only evaluate the common rules on requests whose path is
+        # NOT under /v1/ (the LLM API surface). The UI and everything else still
+        # get full common-rule protection. /v1/* is still covered by the
+        # known-bad-inputs group (headers/URI) + the per-IP rate limit below.
+        scope_down_statement {
+          not_statement {
+            statement {
+              byte_match_statement {
+                search_string         = "/v1/"
+                positional_constraint = "STARTS_WITH"
+                field_to_match {
+                  uri_path {}
+                }
+                text_transformation {
+                  priority = 0
+                  type     = "NONE"
+                }
+              }
+            }
+          }
+        }
+
+        # Belt-and-suspenders for any /v1-adjacent path that still matches: don't
+        # let the body-size / LFI-body rules block large legitimate payloads.
         rule_action_override {
           name = "SizeRestrictions_BODY"
           action_to_use {
@@ -152,6 +186,28 @@ resource "aws_wafv2_web_acl" "litellm" {
       managed_rule_group_statement {
         name        = "AWSManagedRulesKnownBadInputsRuleSet"
         vendor_name = "AWS"
+
+        # Same reasoning as the common set: this group also inspects the body
+        # (Log4JRCE_BODY etc.) and hits the 64KB wall on large LLM payloads.
+        # Only evaluate on non-/v1/ paths; /v1/* stays protected by the rate
+        # limit and by LiteLLM's own virtual-key auth.
+        scope_down_statement {
+          not_statement {
+            statement {
+              byte_match_statement {
+                search_string         = "/v1/"
+                positional_constraint = "STARTS_WITH"
+                field_to_match {
+                  uri_path {}
+                }
+                text_transformation {
+                  priority = 0
+                  type     = "NONE"
+                }
+              }
+            }
+          }
+        }
       }
     }
     visibility_config {
@@ -258,6 +314,10 @@ resource "aws_cloudfront_distribution" "litellm" {
 
     vpc_origin_config {
       vpc_origin_id = aws_cloudfront_vpc_origin.litellm[0].id
+      # LLM turns routinely exceed the 30s default (measured ~27s for 2000 tokens).
+      # 60s is the max without an origin-response-timeout quota increase; request
+      # a quota bump for up to 180s if long reasoning turns still time out.
+      origin_read_timeout = 60
     }
   }
 

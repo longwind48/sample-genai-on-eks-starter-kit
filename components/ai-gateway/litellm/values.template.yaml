@@ -158,8 +158,21 @@ proxy_config:
     store_prompts_in_spend_logs: true
     max_budget: 10000
     budget_duration: 30d
+    # VPC deployment: keep serving if the spend DB blips (per LiteLLM prod guide).
+    # Only safe because the proxy isn't directly internet-reachable (CloudFront-only).
+    allow_requests_on_db_unavailable: true
   litellm_settings:
     drop_params: true
+    # Reliability: long Bedrock turns must not surface as client errors. Without
+    # this, a slow generation or a Bedrock throttle bubbles up as a 5xx that
+    # Claude Code reports as "Server is busy, retrying". 600s matches the LiteLLM
+    # prod reference; retries absorb transient Bedrock ThrottlingException / 5xx.
+    request_timeout: 600
+    num_retries: 3
+    retry_policy:
+      TimeoutErrorRetries: 3
+      RateLimitErrorRetries: 3
+      InternalServerErrorRetries: 3
     # Cost governance defaults
     max_internal_user_budget: 300
     internal_user_budget_duration: 30d
