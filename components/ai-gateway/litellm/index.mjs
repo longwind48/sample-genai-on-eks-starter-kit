@@ -38,6 +38,12 @@ export async function install() {
     llm: config["bedrock"]["llm"]["models"],
     embedding: config["bedrock"]["embedding"]["models"],
   };
+  // Bedrock Mantle (OpenAI-compatible Responses API) — GPT-5.x. Separate endpoint
+  // + Bearer API key auth, so it can't ride the bedrock/ (SigV4/Pod Identity) path.
+  integration["bedrock-mantle"] = {
+    region: config["bedrock"]?.["mantle"]?.["region"] || process.env.REGION || "us-east-1",
+    llm: config["bedrock"]?.["mantle"]?.["llm"]?.["models"] || [],
+  };
   for (const [key, value] of Object.entries(config["llm-model"])) {
     integration["llm-model"][key] = {};
     if (key !== "ollama") {
@@ -118,7 +124,12 @@ export async function install() {
   const valuesTemplate = handlebars.compile(valuesTemplateString);
   const valuesVars = {
     DOMAIN: process.env.DOMAIN,
+    // Set after the CloudFront edge is deployed to lock the ALB to CloudFront IPs.
+    CLOUDFRONT_PREFIX_LIST_ID: process.env.CLOUDFRONT_PREFIX_LIST_ID,
     LITELLM_API_KEY: process.env.LITELLM_API_KEY,
+    // Bedrock long-term API key for the Mantle (GPT-5.x) endpoint. Only needed
+    // when config.bedrock.mantle has models. Bearer auth, not SigV4.
+    BEDROCK_MANTLE_API_KEY: process.env.BEDROCK_MANTLE_API_KEY,
     LITELLM_UI_USERNAME: process.env.LITELLM_UI_USERNAME,
     LITELLM_UI_PASSWORD: process.env.LITELLM_UI_PASSWORD,
     LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,

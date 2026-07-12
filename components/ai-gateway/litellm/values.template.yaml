@@ -1,7 +1,9 @@
 replicaCount: 2
 
 image:
-  tag: main-v1.81.3-stable
+  # Bumped from v1.81.3 to get the bedrock_mantle provider (added 2026-03-05),
+  # required for GPT-5.4/5.5 via the Bedrock Mantle Responses API.
+  tag: main-v1.91.3-stable
 
 global:
   security:
@@ -101,6 +103,11 @@ envVars:
   # LITELLM_LOG: DEBUG
   UI_USERNAME: {{{LITELLM_UI_USERNAME}}}
   UI_PASSWORD: {{{LITELLM_UI_PASSWORD}}}
+  {{#if integration.bedrock-mantle.llm.length}}
+  # Bearer key for Bedrock Mantle (GPT-5.x Responses API). Generate a long-term
+  # Bedrock API key in the console. Auth here is a Bearer token, not SigV4.
+  BEDROCK_MANTLE_API_KEY: {{{BEDROCK_MANTLE_API_KEY}}}
+  {{/if}}
   {{#if @root.integration.o11y.langfuse}}
   LANGFUSE_HOST: http://langfuse-web.langfuse:3000
   LANGFUSE_PUBLIC_KEY: {{{LANGFUSE_PUBLIC_KEY}}}
@@ -120,14 +127,18 @@ envVars:
   {{/if}}
 
 ingress:
+  # Internal ALB only. Public access is via the CloudFront + WAF edge (VPC origin),
+  # never by exposing the ALB directly. See docs/specs/litellm-public-exposure.md.
   enabled: true
-  className: shared-internet-facing-alb
+  className: internal-alb
   annotations:
     alb.ingress.kubernetes.io/target-type: ip
-    {{#if DOMAIN}}
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
-    {{else}}
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    {{#if CLOUDFRONT_PREFIX_LIST_ID}}
+    # Primary lock: only CloudFront edge IPs can reach the ALB at L3/L4. This is
+    # the load-bearing control — direct access from anywhere else is dropped at
+    # the network layer. Confirmed supported on EKS Auto Mode (containers-roadmap #2556).
+    alb.ingress.kubernetes.io/security-group-prefix-lists: {{{CLOUDFRONT_PREFIX_LIST_ID}}}
     {{/if}}
   hosts:
     - paths:
@@ -136,6 +147,12 @@ ingress:
       {{#if DOMAIN}}
       host: litellm.{{{DOMAIN}}}
       {{/if}}
+# ponytail: the X-Origin-Verify shared-secret header (belt-and-suspenders on top
+# of the prefix-list lock) is injected by CloudFront and can be enforced later via
+# an ALB conditions/actions rule. Skipped here because the use-annotation
+# forward+fixed-response dance is fragile to hand-roll in a Helm values template;
+# the prefix-list already makes the ALB unreachable except from CloudFront.
+# Add when: threat model requires guarding against a compromised in-VPC host.
 
 proxy_config:
   general_settings:
@@ -175,6 +192,15 @@ proxy_config:
         {{#if @root.integration.bedrock.region}}
         aws_region_name: {{{@root.integration.bedrock.region}}}
         {{/if}}
+    {{/each}}
+    # Bedrock Mantle Models (GPT-5.x via OpenAI-compatible Responses API).
+    # Different endpoint (/openai/v1) and Bearer auth than bedrock/ above.
+    {{#each integration.bedrock-mantle.llm}}
+    - model_name: bedrock-mantle/{{{name}}}
+      litellm_params:
+        model: bedrock_mantle/{{{model}}}
+        api_key: os.environ/BEDROCK_MANTLE_API_KEY
+        api_base: https://bedrock-mantle.{{{@root.integration.bedrock-mantle.region}}}.api.aws/openai/v1
     {{/each}}
     # Bedrock Embedding Models
     {{#each integration.bedrock.embedding}}

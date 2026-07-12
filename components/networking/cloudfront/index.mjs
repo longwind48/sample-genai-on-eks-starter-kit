@@ -19,79 +19,60 @@ export async function init(_BASE_DIR, _config, _utils) {
 }
 
 export async function install() {
-  const { DOMAIN } = process.env;
+  console.log("Exposing litellm publicly via CloudFront + WAF (internal ALB stays internal)...\n");
 
-  // CloudFront is only needed when DOMAIN is not set
-  if (DOMAIN && DOMAIN !== "") {
-    console.log("CloudFront is not needed when DOMAIN is set.");
-    console.log("With a custom domain, use the shared ALB with HTTPS instead.");
-    console.log("Skipping CloudFront installation.");
-    return;
-  }
-
-  console.log("Installing CloudFront CDN for HTTPS access...\n");
-
-  // Check which services are deployed
-  console.log("Checking for deployed services...");
-  const services = [
-    { name: "openwebui", namespace: "openwebui", ingress: "openwebui" },
-    { name: "litellm", namespace: "litellm", ingress: "litellm" },
-    { name: "langfuse", namespace: "langfuse", ingress: "langfuse" },
-    { name: "qdrant", namespace: "ingress-nginx", ingress: "qdrant-alb" },
-  ];
-
-  let foundServices = 0;
-  for (const svc of services) {
-    try {
-      const result = await $`kubectl get ingress ${svc.ingress} -n ${svc.namespace} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null`;
-      const hostname = result.stdout.trim().replace(/'/g, "");
-      if (hostname) {
-        console.log(`  ✓ ${svc.name}: ${hostname}`);
-        foundServices++;
-      } else {
-        console.log(`  ✗ ${svc.name}: ALB not ready`);
-      }
-    } catch (error) {
-      console.log(`  ✗ ${svc.name}: not deployed`);
+  // The litellm ingress must exist and its internal ALB must be provisioned,
+  // because the terraform discovers it by tag.
+  try {
+    const result = await $`kubectl get ingress litellm -n litellm -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null`;
+    const hostname = result.stdout.trim().replace(/'/g, "");
+    if (!hostname) {
+      throw new Error("litellm ALB not ready");
     }
-  }
-
-  if (foundServices === 0) {
-    console.log("\nNo services with ALBs found. Please deploy services first:");
-    console.log("  ./cli gui-app openwebui install");
+    console.log(`  ✓ litellm internal ALB: ${hostname}`);
+  } catch (error) {
+    console.log("\nlitellm ingress/ALB not found. Deploy litellm first:");
     console.log("  ./cli ai-gateway litellm install");
-    console.log("  ./cli o11y langfuse install");
-    throw new Error("No services available for CloudFront");
+    throw new Error("litellm ALB not available for CloudFront");
   }
 
-  console.log(`\nFound ${foundServices} service(s) with ALBs. Deploying CloudFront...\n`);
+  console.log("\nDeploying CloudFront distribution + WAF (VPC origin -> internal ALB)...\n");
 
-  // Apply main Terraform (CloudFront uses data sources to find ALBs)
-  const TERRAFORM_DIR = path.join(BASE_DIR, "terraform");
-  await utils.terraform.apply(TERRAFORM_DIR);
+  const TERRAFORM_DIR = path.join(DIR, "terraform");
+  await utils.terraform.apply(TERRAFORM_DIR, {
+    vars: {
+      region: process.env.REGION || "us-east-1",
+      expose_litellm_public: true,
+    },
+  });
 
-  // Get outputs
   console.log("\n--- CloudFront Deployment Complete ---\n");
 
   try {
-    const cloudfrontUrl = await utils.terraform.output(TERRAFORM_DIR, { outputName: "cloudfront_url" });
-    if (cloudfrontUrl && cloudfrontUrl !== "null") {
-      console.log(`CloudFront URL: ${cloudfrontUrl}\n`);
-      console.log("Service URLs:");
-      console.log(`  openwebui: ${cloudfrontUrl}/openwebui`);
-      console.log(`  litellm:   ${cloudfrontUrl}/litellm`);
-      console.log(`  langfuse:  ${cloudfrontUrl}/langfuse`);
-      console.log(`  qdrant:    ${cloudfrontUrl}/qdrant`);
-      console.log("\nNote: CloudFront distribution may take 5-10 minutes to fully deploy.");
+    const cloudfrontUrl = await utils.terraform.output(TERRAFORM_DIR, { outputName: "litellm_cloudfront_url" });
+    const prefixListId = await utils.terraform.output(TERRAFORM_DIR, { outputName: "cloudfront_prefix_list_id" });
+    if (cloudfrontUrl && cloudfrontUrl !== "null" && cloudfrontUrl !== "") {
+      console.log(`litellm CloudFront URL: ${cloudfrontUrl}`);
+      console.log("\nNext step: lock the litellm ALB to CloudFront edge IPs. Re-run the");
+      console.log("litellm install with CLOUDFRONT_PREFIX_LIST_ID set so the ingress adds");
+      console.log("the security-group-prefix-lists annotation:");
+      console.log(`  CLOUDFRONT_PREFIX_LIST_ID=${prefixListId} ./cli ai-gateway litellm install`);
+      console.log("\nNote: the distribution may take 5-10 minutes to fully deploy.");
     } else {
-      console.log("CloudFront was not created (check if services have ALBs).");
+      console.log("CloudFront was not created (expose_litellm_public may be false).");
     }
   } catch (error) {
-    console.log("Could not retrieve CloudFront URL. Run './cli terraform output' to check.");
+    console.log("Could not retrieve CloudFront outputs. Run './cli networking cloudfront' terraform output to check.");
   }
 }
 
 export async function uninstall() {
-  console.log("CloudFront will be removed when infrastructure is destroyed.");
-  console.log("Run './cli cleanup-everything' to remove all resources.");
+  console.log("Removing litellm CloudFront distribution + WAF...\n");
+  const TERRAFORM_DIR = path.join(DIR, "terraform");
+  await utils.terraform.destroy(TERRAFORM_DIR, {
+    vars: {
+      region: process.env.REGION || "us-east-1",
+      expose_litellm_public: true,
+    },
+  });
 }
