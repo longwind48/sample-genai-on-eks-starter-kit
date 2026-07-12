@@ -4,7 +4,7 @@ variable "name" {
 }
 variable "region" {
   type    = string
-  default = "us-west-2"
+  default = "us-east-1"
 }
 variable "vpc_cidr" {
   type    = string
@@ -16,11 +16,11 @@ variable "eks_cluster_version" {
 }
 variable "domain" {
   type    = string
-  default = "bursting"
+  default = ""
 }
 variable "efs_throughput_mode" {
   type    = string
-  default = ""
+  default = "bursting"
 }
 variable "gpu_nodepool_capacity_type" {
   type    = list(string)
@@ -40,6 +40,71 @@ variable "enable_nginx" {
 variable "enable_lws" {
   type    = bool
   default = true
+}
+
+variable "enable_ecr_pull_through_cache" {
+  description = "Enable ECR pull through cache for Docker Hub and GitHub Container Registry images"
+  type        = bool
+  default     = false
+}
+
+variable "dockerhub_username" {
+  description = "Docker Hub username for ECR pull through cache authentication"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "dockerhub_access_token" {
+  description = "Docker Hub access token for ECR pull through cache authentication"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "github_username" {
+  description = "GitHub username for GitHub Container Registry pull through cache authentication"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "github_token" {
+  description = "GitHub Personal Access Token for GitHub Container Registry pull through cache authentication"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+# Cost Allocation Tags
+variable "tag_owner" {
+  type        = string
+  description = "Team or individual responsible for the resources"
+  default     = "ml-platform-team"
+}
+
+variable "tag_cost_center" {
+  type        = string
+  description = "Cost center for billing"
+  default     = "engineering"
+}
+
+variable "tag_project" {
+  type        = string
+  description = "Project name"
+  default     = "flexAI"
+}
+
+variable "tag_environment" {
+  type        = string
+  description = "Environment (dev/staging/prod)"
+  default     = "dev"
+}
+
+variable "tag_auto_delete" {
+  type        = string
+  description = "Auto-delete flag (yes/no)"
+  default     = "no"
 }
 
 locals {
@@ -77,4 +142,17 @@ terraform {
   }
 }
 
-provider "aws" { region = var.region }
+provider "aws" {
+  region = var.region
+
+  default_tags {
+    tags = {
+      Owner       = var.tag_owner
+      CostCenter  = var.tag_cost_center
+      Project     = var.tag_project
+      Environment = var.tag_environment
+      auto-delete = var.tag_auto_delete
+      ManagedBy   = "terraform"
+    }
+  }
+}

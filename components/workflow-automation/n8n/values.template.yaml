@@ -2,26 +2,37 @@ ingress:
   enabled: true
   annotations:
     alb.ingress.kubernetes.io/target-type: ip
-  {{#if DOMAIN}}
+{{#if DOMAIN}}
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+{{/if}}
+  className: {{#if DOMAIN}}shared-internet-facing-alb{{else}}internal-alb{{/if}}
   hosts:
+{{#if DOMAIN}}
     - host: n8n.{{{DOMAIN}}}
-  {{else}}
-  hosts:
-    - host:
-  {{/if}}      
-      paths: ["/"]
+      paths:
+        - path: /
+          pathType: Prefix
+{{else}}
+    - host: ""
+      paths:
+        - path: /
+          pathType: Prefix
+{{/if}}
   tls: []
 
 main:
-  {{#unless DOMAIN}}
-  extraEnv:
-    N8N_SECURE_COOKIE:
-      value: "false"
-  {{/unless}}
+{{#unless DOMAIN}}
+  config:
+    n8n:
+      secure_cookie: false
+{{/unless}}
+  persistence:
+    enabled: true
+    type: dynamic
+    size: 10Gi
   resources:
     requests:
-      cpu: 1 
+      cpu: 1
       memory: 2Gi
     limits:
       memory: 2Gi

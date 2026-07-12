@@ -4,9 +4,23 @@ global:
     allowInsecureImages: true
 
 langfuse:
+  # Prevent Karpenter from evicting this pod during consolidation
+  podAnnotations:
+    karpenter.sh/do-not-disrupt: "true"
+  # Schedule on on-demand nodes for stability
+  tolerations:
+    - key: workload-type
+      operator: Equal
+      value: stateful
+      effect: NoSchedule
+  nodeSelector:
+    karpenter.sh/capacity-type: on-demand
   salt:
     value: salt
   nextauth:
+    {{#if LANGFUSE_URL}}
+    url: "{{{LANGFUSE_URL}}}"
+    {{/if}}
     secret:
       value: secret
   encryptionKey:
@@ -25,6 +39,9 @@ langfuse:
         {{#if DOMAIN}}
         host: langfuse.{{{DOMAIN}}}
         {{/if}}
+
+  features:
+    signUpDisabled: true
 
   additionalEnv:
     - name: LANGFUSE_INIT_ORG_ID
@@ -56,7 +73,22 @@ postgresql:
     username: admin
     password: password123
   primary:
-    resources: 
+    # Prevent Karpenter from evicting this pod during consolidation
+    podAnnotations:
+      karpenter.sh/do-not-disrupt: "true"
+    # PodDisruptionBudget - prevent voluntary disruptions
+    pdb:
+      create: true
+      maxUnavailable: 0
+    # Schedule on on-demand nodes for stability
+    tolerations:
+      - key: workload-type
+        operator: Equal
+        value: stateful
+        effect: NoSchedule
+    nodeSelector:
+      karpenter.sh/capacity-type: on-demand
+    resources:
       requests:
         cpu: 125m
         memory: 256Mi
@@ -72,13 +104,38 @@ clickhouse:
   auth:
     password: password123
   replicaCount: 1
+  # Prevent Karpenter from evicting this pod during consolidation
+  podAnnotations:
+    karpenter.sh/do-not-disrupt: "true"
+  # PodDisruptionBudget - prevent voluntary disruptions
+  pdb:
+    create: true
+    maxUnavailable: 0
+  # Schedule on on-demand nodes for stability
+  tolerations:
+    - key: workload-type
+      operator: Equal
+      value: stateful
+      effect: NoSchedule
+  nodeSelector:
+    karpenter.sh/capacity-type: on-demand
+  # Disable verbose system logging to prevent disk from filling up
+  # These are ClickHouse internal diagnostics, not Langfuse trace data
+  extraVolumes:
+    - name: clickhouse-config-overrides
+      configMap:
+        name: clickhouse-config-overrides
+  extraVolumeMounts:
+    - name: clickhouse-config-overrides
+      mountPath: /opt/bitnami/clickhouse/etc/config.d/disable-system-logs.xml
+      subPath: disable-system-logs.xml
   resources:
     requests:
-      cpu: 1    
-      memory: 3Gi
+      cpu: 1
+      memory: 10Gi
       ephemeral-storage: 50Mi
     limits:
-      memory: 3Gi
+      memory: 10Gi
       ephemeral-storage: 2Gi
   zookeeper:
     image:
@@ -87,14 +144,29 @@ clickhouse:
       tag: 3.9.3-debian-12-r8
       pullPolicy: IfNotPresent
     replicaCount: 1
-    resources: 
+    # Prevent Karpenter from evicting this pod during consolidation
+    podAnnotations:
+      karpenter.sh/do-not-disrupt: "true"
+    # PodDisruptionBudget - prevent voluntary disruptions
+    pdb:
+      create: true
+      maxUnavailable: 0
+    # Schedule on on-demand nodes for stability
+    tolerations:
+      - key: workload-type
+        operator: Equal
+        value: stateful
+        effect: NoSchedule
+    nodeSelector:
+      karpenter.sh/capacity-type: on-demand
+    resources:
       requests:
-        cpu: 250m    
+        cpu: 250m
         memory: 384Mi
         ephemeral-storage: 50Mi
       limits:
         memory: 384Mi
-        ephemeral-storage: 2Gi 
+        ephemeral-storage: 2Gi
 
 redis:
   image:
@@ -105,7 +177,22 @@ redis:
   auth:
     password: password123
   primary:
-    resources: 
+    # Prevent Karpenter from evicting this pod during consolidation
+    podAnnotations:
+      karpenter.sh/do-not-disrupt: "true"
+    # PodDisruptionBudget - prevent voluntary disruptions
+    pdb:
+      create: true
+      maxUnavailable: 0
+    # Schedule on on-demand nodes for stability
+    tolerations:
+      - key: workload-type
+        operator: Equal
+        value: stateful
+        effect: NoSchedule
+    nodeSelector:
+      karpenter.sh/capacity-type: on-demand
+    resources:
       requests:
         cpu: 125m
         memory: 256Mi

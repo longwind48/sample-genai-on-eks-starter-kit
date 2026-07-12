@@ -18,7 +18,8 @@ These components and examples will be deployed:
 
 Access Open WebUI at `openwebui.<DOMAIN>` and then:
 
-- Setup [Open WebUI Functions](https://docs.openwebui.com/features/plugin/functions/#%EF%B8%8F-how-to-use-functions) to add and enable [Time Token Tracker](https://openwebui.com/f/owndev/time_token_tracker) and [Strands Agents - Calculator Agent](../examples/strands-agents/calculator-agent/openwebui_pipe_function.py) functions
+- **Agent pipe functions are automatically registered** when agents are installed (e.g., `./cli strands-agents calculator-agent install`). The `Strands Agents - Calculator Agent` function will appear in Open WebUI automatically.
+- Optionally, add [Time Token Tracker](https://openwebui.com/f/owndev/time_token_tracker) from the [Open WebUI Functions](https://docs.openwebui.com/features/plugin/functions/#%EF%B8%8F-how-to-use-functions) marketplace
   ![Open WebUI Functions](../assets/openwebui_functions.png)
 - Change [Open WebUI RAG embedding model](https://docs.openwebui.com/features/rag#rag-embedding-support) to use the deployed Qwen3-Embedding model (check `LITELLM_API_KEY` on `.env.local` for API Key)
   ![Open WebUI Functions](../assets/openwebui_embedding_model.png)
@@ -40,3 +41,30 @@ Access Open WebUI at `openwebui.<DOMAIN>` and then:
 3. Access Langfuse dashboard at `langfuse.<DOMAIN>` (check `LANGFUSE_USERNAME` and `LANGFUSE_PASSWORD` on `.env.local` for Email and Password):
    - Check [Feature Overview](https://langfuse.com/docs/core-features) to explore some of the features
    - [LiteLLM Proxy logging integration with Langfuse](https://docs.litellm.ai/docs/proxy/logging#langfuse) is already configured
+
+### Optional Components
+
+#### n8n Workflow Automation
+
+To deploy n8n for workflow automation:
+
+```bash
+./cli workflow-automation n8n install
+```
+
+Then apply Terraform to create the CloudFront distribution:
+
+```bash
+cd terraform
+terraform apply -var-file=workspaces/<REGION>/terraform.tfvars
+```
+
+Access n8n at:
+
+- With domain: `n8n.<DOMAIN>`
+- Without domain: Run `terraform output n8n_url` to get the CloudFront URL
+
+Check [n8n Documentation](https://docs.n8n.io) to explore workflow automation features including:
+
+- [AI Agent workflows](https://docs.n8n.io/integrations/builtin/cluster-nodes/root-nodes/n8n-nodes-langchain.agent/)
+- [HTTP Request nodes](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.httprequest/) to integrate with LiteLLM API

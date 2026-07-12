@@ -1,0 +1,30 @@
+# MCP Proxy for AWS - Bridges OpenWebUI to AgentCore MCP Server
+# Uses mcp-proxy to convert stdio → streamable HTTP
+
+replicaCount: 1
+
+image:
+  repository: python
+  tag: "3.12-slim"
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: {{{MCP_PROXY_ROLE_ARN}}}
+  name: mcp-proxy
+
+service:
+  type: ClusterIP
+  port: 8080
+
+env:
+  AWS_REGION: {{{AWS_REGION}}}
+  AGENTCORE_RUNTIME_ARN: {{{AGENTCORE_RUNTIME_ARN}}}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi

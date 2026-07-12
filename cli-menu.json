@@ -1,6 +1,18 @@
 {
   "componentCategories": [
     {
+      "dir": "nvidia-platform",
+      "name": "NVIDIA Platform",
+      "components": [
+        { "dir": "gpu-operator", "name": "GPU Operator" },
+        { "dir": "monitoring", "name": "Monitoring (Prometheus + Grafana)" },
+        { "dir": "dynamo-platform", "name": "Dynamo Platform" },
+        { "dir": "dynamo-vllm", "name": "Dynamo vLLM Serving" },
+        { "dir": "benchmark", "name": "AIPerf Benchmark" },
+        { "dir": "aiconfigurator", "name": "AIConfigurator (Auto Config + SLA Deploy)" }
+      ]
+    },
+    {
       "dir": "ai-gateway",
       "name": "AI Gateway",
       "components": [
@@ -43,7 +55,9 @@
         { "dir": "milvus", "name": "Milvus" }
       ]
     },
-    { "dir": "workflow-automation", "name": "Workflow Automation", "components": [{ "dir": "n8n", "name": "n8n" }] }
+    { "dir": "workflow-automation", "name": "Workflow Automation", "components": [{ "dir": "n8n", "name": "n8n" }] },
+    { "dir": "ai-agent", "name": "AI Agent", "components": [{ "dir": "openclaw", "name": "OpenClaw" }] },
+    { "dir": "networking", "name": "Networking", "components": [{ "dir": "cloudfront", "name": "CloudFront CDN" }] }
   ],
   "exampleCategories": [
     { "dir": "mcp-server", "name": "MCP Server", "examples": [{ "dir": "calculator", "name": "Calculator" }] },
@@ -56,6 +70,14 @@
       "dir": "agno",
       "name": "Agno",
       "examples": [{ "dir": "calculator-agent", "name": "Calculator Agent" }]
+    },
+    {
+      "dir": "openclaw",
+      "name": "OpenClaw",
+      "examples": [
+        { "dir": "doc-writer", "name": "Document Writer Agent" },
+        { "dir": "devops-agent", "name": "DevOps Agent" }
+      ]
     }
   ]
 }

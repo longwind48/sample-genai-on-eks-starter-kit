@@ -1,7 +1,34 @@
+replicaCount: 2
+
+image:
+  # Bumped from v1.81.3 to get the bedrock_mantle provider (added 2026-03-05)
+  # + mantle SigV4 auth (v1.87.2), required for GPT-5.4/5.5. Tag format changed:
+  # newer releases publish `vX.Y.Z` (no main- prefix / -stable suffix). Verified
+  # ghcr.io/berriai/litellm-database:v1.91.3 exists.
+  tag: v1.91.3
+
 global:
   security:
     # -- Allow insecure images to use our ECR images.
     allowInsecureImages: true
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+pdb:
+  enabled: true
+  maxUnavailable: 1
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app: litellm
 
 {{#if @root.integration.o11y.mlflow}}
 image:
@@ -24,7 +51,18 @@ redis:
     tag: 8.2.1-debian-12-r0
     pullPolicy: IfNotPresent
   master:
-    resources: 
+    # Prevent Karpenter from evicting this pod during consolidation
+    podAnnotations:
+      karpenter.sh/do-not-disrupt: "true"
+    # Schedule on on-demand nodes for stability
+    tolerations:
+      - key: workload-type
+        operator: Equal
+        value: stateful
+        effect: NoSchedule
+    nodeSelector:
+      karpenter.sh/capacity-type: on-demand
+    resources:
       requests:
         cpu: 125m
         memory: 256Mi
@@ -38,7 +76,18 @@ postgresql:
     tag: 17.5.0-debian-12-r8
     pullPolicy: IfNotPresent
   primary:
-    resources: 
+    # Prevent Karpenter from evicting this pod during consolidation
+    podAnnotations:
+      karpenter.sh/do-not-disrupt: "true"
+    # Schedule on on-demand nodes for stability
+    tolerations:
+      - key: workload-type
+        operator: Equal
+        value: stateful
+        effect: NoSchedule
+    nodeSelector:
+      karpenter.sh/capacity-type: on-demand
+    resources:
       requests:
         cpu: 125m
         memory: 256Mi
@@ -75,12 +124,18 @@ envVars:
   {{/if}}
 
 ingress:
+  # Internal ALB only. Public access is via the CloudFront + WAF edge (VPC origin),
+  # never by exposing the ALB directly. See docs/specs/litellm-public-exposure.md.
   enabled: true
-  className: {{#if DOMAIN}}shared-{{/if}}internet-facing-alb
+  className: internal-alb
   annotations:
     alb.ingress.kubernetes.io/target-type: ip
-    {{#if DOMAIN}}
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    {{#if CLOUDFRONT_PREFIX_LIST_ID}}
+    # Primary lock: only CloudFront edge IPs can reach the ALB at L3/L4. This is
+    # the load-bearing control — direct access from anywhere else is dropped at
+    # the network layer. Confirmed supported on EKS Auto Mode (containers-roadmap #2556).
+    alb.ingress.kubernetes.io/security-group-prefix-lists: {{{CLOUDFRONT_PREFIX_LIST_ID}}}
     {{/if}}
   hosts:
     - paths:
@@ -89,18 +144,47 @@ ingress:
       {{#if DOMAIN}}
       host: litellm.{{{DOMAIN}}}
       {{/if}}
+# ponytail: the X-Origin-Verify shared-secret header (belt-and-suspenders on top
+# of the prefix-list lock) is injected by CloudFront and can be enforced later via
+# an ALB conditions/actions rule. Skipped here because the use-annotation
+# forward+fixed-response dance is fragile to hand-roll in a Helm values template;
+# the prefix-list already makes the ALB unreachable except from CloudFront.
+# Add when: threat model requires guarding against a compromised in-VPC host.
 
 proxy_config:
   general_settings:
     master_key: os.environ/PROXY_MASTER_KEY
     store_model_in_db: true
     store_prompts_in_spend_logs: true
+    max_budget: 10000
+    budget_duration: 30d
+    # VPC deployment: keep serving if the spend DB blips (per LiteLLM prod guide).
+    # Only safe because the proxy isn't directly internet-reachable (CloudFront-only).
+    allow_requests_on_db_unavailable: true
   litellm_settings:
+    drop_params: true
+    # Reliability: long Bedrock turns must not surface as client errors. Without
+    # this, a slow generation or a Bedrock throttle bubbles up as a 5xx that
+    # Claude Code reports as "Server is busy, retrying". 600s matches the LiteLLM
+    # prod reference; retries absorb transient Bedrock ThrottlingException / 5xx.
+    request_timeout: 600
+    num_retries: 3
+    retry_policy:
+      TimeoutErrorRetries: 3
+      RateLimitErrorRetries: 3
+      InternalServerErrorRetries: 3
+    # Cost governance defaults
+    max_internal_user_budget: 300
+    internal_user_budget_duration: 30d
+    upperbound_key_generate_params:
+      max_budget: 300
+      budget_duration: "30d"
+      duration: "90d"
     {{#with integration.o11y.config}}
-    {{#if callbacks}}    
+    {{#if callbacks}}
     callbacks: {{{callbacks}}}
     {{/if}}
-    {{#if success_callback}}    
+    {{#if success_callback}}
     success_callback: {{{success_callback}}}
     {{/if}}
     {{#if failure_callback}}
@@ -118,6 +202,18 @@ proxy_config:
         {{#if @root.integration.bedrock.region}}
         aws_region_name: {{{@root.integration.bedrock.region}}}
         {{/if}}
+    {{/each}}
+    # Bedrock Mantle Models (GPT-5.x via OpenAI-compatible Responses API).
+    # Different endpoint (/openai/v1) than bedrock/ above. No api_key: with no
+    # bearer token, LiteLLM (>=v1.87.2) SigV4-signs via the pod's IAM credentials
+    # (EKS Pod Identity) — same role the bedrock/ models use, no static/short-term
+    # key to manage. Requires the litellm image >= v1.87.2 (we pin v1.91.3).
+    {{#each integration.bedrock-mantle.llm}}
+    - model_name: bedrock-mantle/{{{name}}}
+      litellm_params:
+        model: bedrock_mantle/{{{model}}}
+        aws_region_name: {{{@root.integration.bedrock-mantle.region}}}
+        api_base: https://bedrock-mantle.{{{@root.integration.bedrock-mantle.region}}}.api.aws/openai/v1
     {{/each}}
     # Bedrock Embedding Models
     {{#each integration.bedrock.embedding}}
@@ -186,13 +282,18 @@ proxy_config:
     - guardrail_name: "bedrock-guardrail"
       litellm_params:
         guardrail: bedrock
-        mode: "post_call"
+        mode: "during_call"
         default_on: true
         guardrailIdentifier: "{{{bedrock.id}}}"
         guardrailVersion: "{{{bedrock.version}}}"
         {{#if @root.integration.bedrock.region}}
         aws_region_name: {{{@root.integration.bedrock.region}}}
         {{/if}}
+        mask_request_content: true
+        mask_response_content: true
+        experimental_use_latest_role_message_only: true
+        skip_system_message_in_guardrail: true
+        disable_exception_on_block: true
     {{/if}}    
     {{#if guardrailsAI}}
     - guardrail_name: "guardrails-ai"

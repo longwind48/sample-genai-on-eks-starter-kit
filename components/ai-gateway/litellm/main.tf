@@ -48,6 +48,18 @@ module "pod_identity" {
         "bedrock:ApplyGuardrail"
       ]
       resources = ["*"]
+    },
+    {
+      # GPT-5.x etc. on the bedrock-mantle endpoint. CreateInference authorizes
+      # both Chat Completions and Responses calls; SigV4 auth (pod IAM) needs no
+      # CallWithBearerToken. Scoped to mantle projects in-account.
+      sid = "BedrockMantleInference"
+      actions = [
+        "bedrock-mantle:CreateInference",
+        "bedrock-mantle:Get*",
+        "bedrock-mantle:List*"
+      ]
+      resources = ["arn:aws:bedrock-mantle:*:*:project/*"]
     }
   ]
   associations = {
@@ -62,20 +74,42 @@ module "pod_identity" {
 resource "aws_bedrock_guardrail" "this" {
   count                     = var.enable_bedrock_guardrail ? 1 : 0
   provider                  = aws.bedrock
-  name                      = var.name
-  blocked_input_messaging   = "Sorry, the model cannot answer this question."
-  blocked_outputs_messaging = "Sorry, the model cannot answer this question."
-  description               = var.name
-  contextual_grounding_policy_config {
-    filters_config {
-      threshold = 0.7
-      type      = "GROUNDING"
+  name                      = "${var.name}-claude-code"
+  blocked_input_messaging   = "Sorry, this request was blocked by the content guardrail."
+  blocked_outputs_messaging = "Sorry, this response was blocked by the content guardrail."
+  description               = "Guardrail for Claude Code traffic - PII detection and profanity filter"
+
+  sensitive_information_policy_config {
+    pii_entities_config {
+      action = "ANONYMIZE"
+      type   = "US_SOCIAL_SECURITY_NUMBER"
     }
-    filters_config {
-      threshold = 0.7
-      type      = "RELEVANCE"
+    pii_entities_config {
+      action = "ANONYMIZE"
+      type   = "CREDIT_DEBIT_CARD_NUMBER"
+    }
+    pii_entities_config {
+      action = "ANONYMIZE"
+      type   = "AWS_ACCESS_KEY"
+    }
+    pii_entities_config {
+      action = "ANONYMIZE"
+      type   = "AWS_SECRET_KEY"
+    }
+    pii_entities_config {
+      action = "ANONYMIZE"
+      type   = "US_PASSPORT_NUMBER"
+    }
+    pii_entities_config {
+      action = "ANONYMIZE"
+      type   = "DRIVER_ID"
+    }
+    pii_entities_config {
+      action = "ANONYMIZE"
+      type   = "US_INDIVIDUAL_TAX_IDENTIFICATION_NUMBER"
     }
   }
+
   word_policy_config {
     managed_word_lists_config {
       type = "PROFANITY"

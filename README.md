@@ -11,6 +11,7 @@ The starter kit includes the configurable components and examples from several c
 - GUI App - [Open WebUI](https://docs.openwebui.com)
 - Vector Database - [Qdrant](https://qdrant.tech), [Chroma](https://docs.trychroma.com), [Milvus](https://milvus.io)
 - Workflow Automation - [n8n](https://docs.n8n.io)
+- AI Agent - [OpenClaw](https://github.com/openclaw/openclaw)
 - MCP Server - [FastMCP 2.0](https://gofastmcp.com)
 - AI Agent Framework - [Strands Agents ](https://strandsagents.com), [Agno](https://docs.agno.com)
 
@@ -92,6 +93,30 @@ This command will:
 
 Note. Unlike the quick demo setup, the selected components and examples may not be deployed in the required order. Some components/examples might need to be refreshed by running the CLI install command again.
 
+## NVIDIA Dynamo Platform Setup
+
+This starter kit supports deploying [NVIDIA Dynamo](https://developer.nvidia.com/dynamo) for optimized LLM inference on Amazon EKS.
+
+### Quick Start
+
+1. Install components in order:
+
+```bash
+./cli nvidia-platform monitoring install      # Prometheus + Grafana
+./cli nvidia-platform gpu-operator install     # NVIDIA GPU Operator
+./cli nvidia-platform dynamo-platform install  # Dynamo CRDs, Operator, etcd, NATS
+./cli nvidia-platform dynamo-vllm install      # Deploy a model with vLLM
+```
+
+2. Optionally run benchmarks and auto-configuration:
+
+```bash
+./cli nvidia-platform benchmark install       # AIPerf concurrency sweep
+./cli nvidia-platform aiconfigurator install   # TP/PP recommendation + SLA deploy
+```
+
+For full details on platform prerequisites, deployment modes (aggregated vs disaggregated), KV cache routing, monitoring dashboards, benchmarking, and AIConfigurator, see the [NVIDIA Platform README](components/nvidia-platform/README.md).
+
 ## Components & Examples Management
 
 You can install or uninstall individual components/examples using the CLI:
@@ -172,6 +197,58 @@ Remove all models for a specific component:
 # ./cli embedding-model tei remove-all-models
 ```
 
+## GPU Model Scaling (Cost Savings)
+
+The CLI provides commands to scale GPU model deployments for cost savings. When scaled to 0, Karpenter will terminate the GPU nodes.
+
+### Check Status
+
+View the current state of GPU model deployments:
+
+```bash
+./cli gpu-models status
+```
+
+### Scale Down
+
+Scale all GPU model deployments to 0 replicas to save costs:
+
+```bash
+./cli gpu-models scale-down
+```
+
+Note: LiteLLM and OpenWebUI will remain running, but requests to self-hosted models will fail. Bedrock/external models continue to work.
+
+### Scale Up
+
+Scale GPU model deployments back to 1 replica:
+
+```bash
+./cli gpu-models scale-up
+```
+
+Note: Models take 3-5 minutes to be ready while Karpenter provisions GPU nodes and model weights are loaded. The command will display kubectl commands to check loading progress.
+
+## Accessing Services
+
+All services are deployed behind **internal ALBs** (not internet-facing), meaning they are only reachable from within the VPC. This is a security best practice to avoid exposing services like LLM gateways, observability dashboards, and vector databases directly to the public internet.
+
+To access services from your local machine, use `kubectl port-forward` via the provided Makefile:
+
+```bash
+make help          # Show all available targets
+
+make litellm       # AI Gateway        → http://localhost:4000
+make langfuse      # LLM Observability → http://localhost:3000
+make n8n           # Workflow Auto     → http://localhost:5678
+make qdrant        # Vector Database   → http://localhost:6333
+make openwebui     # Chat UI           → http://localhost:8080
+
+make list-albs     # Show all internal ALB hostnames
+```
+
+Each command opens a port-forward session — press `Ctrl+C` to stop. You can run multiple services in separate terminal tabs.
+
 ## Cleanup
 
 There are two methods to clean up your environment:
@@ -218,7 +295,22 @@ This command will:
 
 With a domain name already configured with a Route 53 hosted zone, a single shared ALB with HTTPS is used together with a wildcard ACM cert and Route 53 DNS records to expose all public facing services e.g. litellm.<DOMAIN> and openwebui.<DOMAIN>.
 
-Alternatively, when the `DOMAIN` filed on `.env` (or `.env.local`) is empty, mulitple ALBs with HTTP will be created for each public facing service. In this case, only one service requiring the Nginx Ingress basic auth (e.g. Milvus and Qdrant) can be exposed.
+Alternatively, when the `DOMAIN` field on `.env` (or `.env.local`) is empty, multiple ALBs with HTTP will be created for each public facing service. CloudFront distributions are automatically created to provide HTTPS access. Run `terraform output` in the `terraform/` directory to get the CloudFront URLs:
+
+```bash
+cd terraform
+terraform output cloudfront_urls
+# Example output:
+# {
+#   "langfuse" = "https://xxx.cloudfront.net"
+#   "litellm" = "https://xxx.cloudfront.net"
+#   "n8n" = "https://xxx.cloudfront.net"
+#   "openwebui" = "https://xxx.cloudfront.net"
+#   "qdrant" = "https://xxx.cloudfront.net"
+# }
+```
+
+In this case, only one service requiring the Nginx Ingress basic auth (e.g. Milvus and Qdrant) can be exposed.
 
 ### How can I configure and update the LiteLLM proxy model list?
 
@@ -240,7 +332,7 @@ For Bedrock models, the model list hardcoded on config.json.
 
 ### How can I change the EC2 GPU instance families and purchasing options?
 
-The default instance families are g6e, g6 and g5g and the default purchasing options are spot and on-demand. You can change the values on `terraform/0-common.tf` and then run `./cli terraform apply again`.
+The default instance families are g6e, g6, g5g, p5en, p5e, p5, p4de and p4d, and the default purchasing options are spot and on-demand. You can change the values on `terraform/variables.tf` (see `gpu_nodepool_instance_family` and `gpu_nodepool_capacity_type`) and then run `./cli terraform apply` again.
 
 Note that the model deployment manifests use `nodeSelector` like `eks.amazonaws.com/instance-family: g6e` to lock the specific tested instance family which you will need to adjust accordingly.
 
@@ -269,6 +361,68 @@ By default, the same region as the EKS cluster will be used. To change it, modif
 ### How can I provision and manage multiple EKS clusters?
 
 You can change the values of the `REGION`, `EKS_CLUSTER_NAME`, and `DOMAIN` fields on `.env` (or `.env.local`). Then, Terraform workspace and kubectl context will automatically use those values when running the related `./cli` commands.
+
+### What is ECR Pull Through Cache and should I enable it?
+
+ECR Pull Through Cache caches external container images (from Docker Hub, GitHub Container Registry) in your private ECR registry. This avoids rate limits from public registries and keeps images within your AWS infrastructure.
+
+**Default: Disabled** (`enable_ecr_pull_through_cache = false`)
+
+**Why disabled by default?**
+- Cached images are stored in your private ECR, which incurs storage costs
+- Public registries (Docker Hub, GHCR) work fine for most use cases since EKS nodes have internet access
+
+**When to enable:**
+- You're hitting Docker Hub rate limits (anonymous: 100 pulls/6hrs, authenticated: 200 pulls/6hrs)
+- You want faster, more reliable pulls from within AWS
+- Your organization requires images to be stored in private registries
+
+**To enable:**
+
+Docker Hub and GitHub Container Registry require authentication for ECR pull through cache. You'll need to provide credentials for both registries.
+
+1. **Get Docker Hub credentials:**
+   - Create a Docker Hub account at [hub.docker.com](https://hub.docker.com)
+   - Generate an access token at [Docker Hub Security Settings](https://hub.docker.com/settings/security) → "New Access Token"
+   - For more information, see [Create and manage access tokens](https://docs.docker.com/security/for-developers/access-tokens/) in the Docker documentation
+
+2. **Get GitHub credentials:**
+   - Generate a Personal Access Token (classic) at [GitHub Settings → Developer settings → Personal access tokens](https://github.com/settings/tokens)
+   - The token needs `read:packages` scope to pull from GitHub Container Registry
+   - For more information, see [Managing your personal access tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) in the GitHub documentation
+
+3. **Configure credentials in `config.local.json`:**
+
+```json
+// config.local.json
+{
+  "terraform": {
+    "vars": {
+      "enable_ecr_pull_through_cache": true,
+      "dockerhub_username": "your-dockerhub-username",
+      "dockerhub_access_token": "your-dockerhub-access-token",
+      "github_username": "your-github-username",
+      "github_token": "your-github-personal-access-token"
+    }
+  }
+}
+```
+
+4. **Apply the changes:**
+
+```bash
+./cli terraform apply
+```
+
+**Important:** Keep your credentials in `config.local.json` (which is gitignored) and never commit them to version control. The credentials are stored securely in AWS Secrets Manager with the `ecr-pullthroughcache/` prefix.
+
+**Supported registries:**
+- `vllm/*` → Docker Hub
+- `lmsysorg/*` → Docker Hub  
+- `ollama/*` → Docker Hub
+- `huggingface/*` → GitHub Container Registry
+
+**Note:** When you `terraform destroy`, the cache rules are deleted but the cached ECR repositories remain. To fully clean up, manually delete repositories starting with `vllm/`, `lmsysorg/`, `ollama/`, or `huggingface/` from ECR.
 
 ## Disclaimer
 

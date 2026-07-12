@@ -13,13 +13,25 @@ __pycache__/
 
 # Project
 .DS_Store
-.kiro/
 .backup/
+
+# AI Agent Tools
+.kiro/
+.claude/
+.omc/
+CLAUDE.md
+AGENTS.md
 .temp/
 .kubeconfig
+.env
 .env.local
 config.local.json
+CLAUDE.local.md
 *.rendered.yaml
 test*.py
 test*.mjs
 terraform/eks.tf
+docs/external-images.md
+
+# OpenClaw shared dist (built artifacts)
+examples/openclaw/shared/dist/

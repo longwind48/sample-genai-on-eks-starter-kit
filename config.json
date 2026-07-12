@@ -55,7 +55,15 @@
         { "name": "qwen3-8b-fp8", "deploy": false }
       ]
     },
-    "ollama": { "models": ["qwen3:32b", "qwen3:30b", "gemma3:27b", "deepseek-r1:8b", "nomic-embed-text:v1.5"] }
+    "ollama": {
+      "models": [
+        "qwen3:32b",
+        "qwen3:30b",
+        "gemma3:27b",
+        "deepseek-r1:8b",
+        "nomic-embed-text:v1.5"
+      ]
+    }
   },
   "embedding-model": {
     "tei": {
@@ -72,18 +80,42 @@
     "llm": {
       "models": [
         { "name": "amazon-nova-premier", "model": "us.amazon.nova-premier-v1:0" },
-        { "name": "claude-4-opus", "model": "us.anthropic.claude-opus-4-20250514-v1:0" },
-        { "name": "claude-4-sonnet", "model": "us.anthropic.claude-sonnet-4-20250514-v1:0" },
-        { "name": "claude-3.7-sonnet", "model": "us.anthropic.claude-3-7-sonnet-20250219-v1:0" },
+        { "name": "amazon-nova-2-lite", "model": "global.amazon.nova-2-lite-v1:0" },
+        { "name": "claude-opus-4.8", "model": "global.anthropic.claude-opus-4-8" },
+        { "name": "claude-opus-4.7", "model": "global.anthropic.claude-opus-4-7" },
+        { "name": "claude-opus-4.6", "model": "global.anthropic.claude-opus-4-6-v1" },
+        { "name": "claude-4.5-opus", "model": "global.anthropic.claude-opus-4-5-20251101-v1:0" },
+        { "name": "claude-4.5-sonnet", "model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0" },
+        { "name": "claude-4.5-haiku", "model": "global.anthropic.claude-haiku-4-5-20251001-v1:0" },
+        { "name": "claude-fable-5", "model": "global.anthropic.claude-fable-5" },
+        { "name": "gpt-oss-120b", "model": "openai.gpt-oss-120b-1:0" },
+        { "name": "gpt-oss-20b", "model": "openai.gpt-oss-20b-1:0" },
         { "name": "llama4-maverick", "model": "us.meta.llama4-maverick-17b-instruct-v1:0" },
         { "name": "llama4-scout", "model": "us.meta.llama4-scout-17b-instruct-v1:0" }
       ]
     },
-    "embedding": { "models": [] }
+    "embedding": { "models": [] },
+    "mantle": {
+      "region": "us-east-1",
+      "llm": {
+        "models": [
+          { "name": "gpt-5.5", "model": "openai.gpt-5.5" },
+          { "name": "gpt-5.4", "model": "openai.gpt-5.4" }
+        ]
+      }
+    }
   },
   "litellm": {
     "enableBedrockGuardrail": false,
     "enableGuardrailsAI": false
+  },
+  "ai-agent": {
+    "openclaw": {
+      "env": {
+        "LITELLM_MODEL_NAME": "bedrock/claude-4.5-sonnet",
+        "OPENCLAW_GATEWAY_TOKEN": "openclaw-gateway-token"
+      }
+    }
   },
   "examples": {
     "agno": {
@@ -106,6 +138,20 @@
           "USE_MCP_GATEWAY": true
         }
       }
+    },
+    "openclaw": {
+      "doc-writer": {
+        "env": {
+          "LITELLM_MODEL_NAME": "bedrock/claude-4.5-sonnet",
+          "OPENCLAW_GATEWAY_TOKEN": "openclaw-gateway-token"
+        }
+      },
+      "devops-agent": {
+        "env": {
+          "LITELLM_MODEL_NAME": "bedrock/claude-4.5-sonnet",
+          "OPENCLAW_GATEWAY_TOKEN": "openclaw-gateway-token"
+        }
+      }
     }
   },
   "docker": {
@@ -114,7 +160,56 @@
   },
   "terraform": {
     "vars": {
-      "efs_throughput_mode": "bursting"
+      "efs_throughput_mode": "bursting",
+      "enable_ecr_pull_through_cache": false,
+      "dockerhub_username": "",
+      "dockerhub_access_token": "",
+      "github_username": "",
+      "github_token": ""
+    }
+  },
+  "platform": {
+    "monitoring": {
+      "grafanaAdminPassword": "admin",
+      "retention": "7d",
+      "enablePersistentStorage": false,
+      "prometheusStorageSize": "50Gi",
+      "alertmanagerEnabled": false
+    },
+    "type": "eks",
+    "eks": {
+      "storageClass": "efs",
+      "gpuNodeSelectorKey": "nvidia.com/gpu.present",
+      "gpuNodeSelectorValue": "true",
+      "gpuOperator": {
+        "driverEnabled": false,
+        "toolkitEnabled": false,
+        "devicePluginEnabled": false,
+        "gfdEnabled": true,
+        "dcgmExporterEnabled": true,
+        "gdsEnabled": true,
+        "nfdEnabled": false,
+        "migManagerEnabled": false,
+        "useAMP": false,
+        "ampWorkspaceId": ""
+      },
+      "dynamoPlatform": {
+        "releaseVersion": "0.9.1",
+        "namespace": "dynamo-system",
+        "groveEnabled": true,
+        "kaiSchedulerEnabled": true
+      }
+    },
+    "k8s": {
+      "storageClass": "nfs",
+      "gpuNodeSelectorKey": "nvidia.com/gpu.present",
+      "gpuNodeSelectorValue": "true",
+      "dynamoPlatform": {
+        "releaseVersion": "0.9.0-post1",
+        "namespace": "dynamo-system",
+        "groveEnabled": true,
+        "kaiSchedulerEnabled": true
+      }
     }
   }
 }

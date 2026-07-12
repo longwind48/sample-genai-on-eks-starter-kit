@@ -43,6 +43,55 @@ spec:
   depends_on = [module.eks]
 }
 
+# Stateful workloads NodePool - on-demand only for database stability
+resource "kubectl_manifest" "karpenter_nodepool_stateful" {
+  yaml_body = <<-YAML
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: stateful
+spec:
+  weight: 100
+  limits:
+    cpu: 20
+  disruption:
+    budgets:
+      - nodes: "0"
+    consolidateAfter: Never
+    consolidationPolicy: WhenEmpty
+  template:
+    spec:
+      expireAfter: 480h
+      nodeClassRef:
+        group: eks.amazonaws.com
+        kind: NodeClass
+        name: default
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        - key: eks.amazonaws.com/instance-category
+          operator: In
+          values: ["c", "m", "r"]
+        - key: eks.amazonaws.com/instance-generation
+          operator: Gt
+          values: ["4"]
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64", "arm64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+      terminationGracePeriod: 24h0m0s
+      taints:
+        - key: workload-type
+          value: stateful
+          effect: NoSchedule
+  YAML
+
+  depends_on = [module.eks]
+}
+
 resource "kubectl_manifest" "karpenter_nodepool_gpu" {
   yaml_body = <<-YAML
 apiVersion: karpenter.sh/v1
@@ -297,6 +346,9 @@ spec:
   scheme: internet-facing
   group:
     name: shared-internet-facing-alb
+  tags:
+    - key: auto-delete
+      value: "no"
   YAML
 
   depends_on = [module.eks_blueprints_addons_core]
@@ -346,21 +398,24 @@ spec:
   depends_on = [kubectl_manifest.ingressclass_shared_internet_facing_alb]
 }
 
-resource "kubectl_manifest" "ingressclassparams_internet_facing_alb" {
+resource "kubectl_manifest" "ingressclassparams_internal_alb" {
   count     = var.domain == "" ? 1 : 0
   yaml_body = <<-YAML
 apiVersion: eks.amazonaws.com/v1
 kind: IngressClassParams
 metadata:
-  name: internet-facing-alb
+  name: internal-alb
 spec:
-  scheme: internet-facing
+  scheme: internal
+  tags:
+    - key: auto-delete
+      value: "no"
   YAML
 
   depends_on = [module.eks_blueprints_addons_core]
 }
 
-resource "kubectl_manifest" "ingressclass_internet_facing_alb" {
+resource "kubectl_manifest" "ingressclass_internal_alb" {
   count = var.domain == "" ? 1 : 0
 
   yaml_body = <<-YAML
@@ -369,16 +424,16 @@ kind: IngressClass
 metadata:
   annotations:
     ingressclass.kubernetes.io/is-default-class: "true"
-  name: internet-facing-alb
+  name: internal-alb
 spec:
   controller: eks.amazonaws.com/alb
   parameters:
     apiGroup: eks.amazonaws.com
     kind: IngressClassParams
-    name: internet-facing-alb
+    name: internal-alb
   YAML
 
-  depends_on = [kubectl_manifest.ingressclassparams_internet_facing_alb]
+  depends_on = [kubectl_manifest.ingressclassparams_internal_alb]
 }
 
 # EBS
@@ -394,6 +449,7 @@ provisioner: ebs.csi.eks.amazonaws.com
 volumeBindingMode: WaitForFirstConsumer
 parameters:
   type: gp3
+  tagSpecification_1: "auto-delete=no"
   YAML
 
   ignore_fields = ["metadata.uid", "metadata.resourceVersion"]
@@ -423,7 +479,6 @@ resource "kubectl_manifest" "storageclass_efs" {
       provisioningMode: efs-ap
       fileSystemId: ${var.efs_file_system_id}
       directoryPerms: "700"
-      reuseAccessPoint: "true"
   YAML
 
   ignore_fields = ["metadata.uid", "metadata.resourceVersion"]
@@ -442,4 +497,50 @@ resource "helm_release" "lws" {
   create_namespace = true
 
   depends_on = [module.eks_blueprints_addons_core]
+}
+
+
+# MCP Proxy for AgentCore
+resource "aws_iam_role" "mcp_proxy" {
+  name = "${module.eks.cluster_name}-${var.region}-mcp-proxy"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "pods.eks.amazonaws.com"
+        }
+        Action = [
+          "sts:AssumeRole",
+          "sts:TagSession"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "mcp_proxy_agentcore" {
+  name = "agentcore-invoke"
+  role = aws_iam_role.mcp_proxy.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock-agentcore:InvokeAgentRuntime"
+        ]
+        Resource = "arn:aws:bedrock-agentcore:*:*:runtime/*"
+      }
+    ]
+  })
+}
+
+resource "aws_eks_pod_identity_association" "mcp_proxy" {
+  cluster_name    = module.eks.cluster_name
+  namespace       = "openwebui"
+  service_account = "mcp-proxy"
+  role_arn        = aws_iam_role.mcp_proxy.arn
 }

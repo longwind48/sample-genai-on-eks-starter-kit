@@ -10,6 +10,27 @@ let config;
 let configLocalPath;
 let COMPONENTS_DIR;
 
+// Check if running in K8s mode (non-EKS)
+const isK8sMode = () => {
+  return process.env.PLATFORM === "k8s";
+};
+
+// Auto-detect AWS Account ID if not set in environment
+const getAwsAccountId = async () => {
+  // Return empty string in K8s mode (no AWS)
+  if (isK8sMode()) {
+    return "";
+  }
+  // Fetch from AWS CLI
+  try {
+    const result = await $`aws sts get-caller-identity --query Account --output text`;
+    return result.stdout.trim();
+  } catch (error) {
+    console.error("Error: Could not determine AWS Account ID. Please set AWS_ACCOUNT_ID in .env or ensure AWS CLI is configured.");
+    return undefined;
+  }
+};
+
 const init = (options) => {
   BASE_DIR = options.BASE_DIR;
   config = options.config;
@@ -26,16 +47,76 @@ const checkRequiredEnvVars = (requiredEnvVars) => {
   }
 };
 
+const checkHtpasswd = async () => {
+  try {
+    await $`which htpasswd`.quiet();
+  } catch {
+    console.error("\n❌ Error: htpasswd command not found.");
+    console.error("\nhtpasswd is required for generating HTTP Basic Authentication credentials.");
+    console.error("Please install it based on your operating system:\n");
+    console.error("  macOS (Homebrew):        brew install httpd");
+    console.error("  Debian/Ubuntu:           sudo apt-get install apache2-utils");
+    console.error("  RHEL/CentOS/Amazon Linux: sudo yum install httpd-tools");
+    console.error("  Fedora:                  sudo dnf install httpd-tools");
+    console.error("  Alpine:                  apk add apache2-utils\n");
+    process.exit(1);
+  }
+};
+
 const setK8sContext = async () => {
+  // Skip context switching in K8s mode - use current context
+  if (isK8sMode()) {
+    console.log("K8s mode: Using current kubectl context");
+    return;
+  }
+  
+  // EKS mode: switch to EKS context
   const { EKS_CLUSTER_NAME, REGION } = process.env;
   const contextName = `${EKS_CLUSTER_NAME}-${REGION}`;
   await $`kubectl config use-context ${contextName}`;
 };
 
+// Register Handlebars helpers for platform-aware templating
+handlebars.registerHelper('eq', function(a, b) {
+  return a === b;
+});
+
+handlebars.registerHelper('isK8s', function(options) {
+  return process.env.PLATFORM === 'k8s' ? options.fn(this) : options.inverse(this);
+});
+
+handlebars.registerHelper('isEks', function(options) {
+  return process.env.PLATFORM !== 'k8s' ? options.fn(this) : options.inverse(this);
+});
+
 const renderTemplate = (templatePath, renderedPath, vars) => {
   const templateString = fs.readFileSync(templatePath, "utf8");
   const template = handlebars.compile(templateString);
   fs.writeFileSync(renderedPath, template(vars));
+};
+
+// ECR Pull Through Cache 
+const getImagePrefixes = async () => {
+  // K8s mode: use public registries directly
+  if (isK8sMode()) {
+    return {
+      DOCKER_IMAGE_PREFIX: "",
+      GHCR_IMAGE_PREFIX: "ghcr.io/",
+    };
+  }
+  
+  // EKS mode: use ECR Pull Through Cache if enabled
+  const enabled = config?.terraform?.vars?.enable_ecr_pull_through_cache;
+  const { REGION } = process.env;
+  const awsAccountId = await getAwsAccountId();
+  const ecrBase = enabled ? `${awsAccountId}.dkr.ecr.${REGION}.amazonaws.com` : "";
+
+  return {
+    // Docker Hub: empty when disabled, ECR prefix when enabled
+    DOCKER_IMAGE_PREFIX: enabled ? `${ecrBase}/docker-hub/` : "",
+    // GHCR: ghcr.io/ when disabled, ECR prefix when enabled
+    GHCR_IMAGE_PREFIX: enabled ? `${ecrBase}/github/` : "ghcr.io/",
+  };
 };
 
 // Model Management
@@ -60,16 +141,42 @@ const model = (function () {
     fs.writeFileSync(configLocalPath, formattedConfig);
   };
 
+  // Helper to get common model template variables
+  const getModelVars = async () => {
+    const { EKS_MODE } = process.env;
+    const imagePrefixes = await getImagePrefixes();
+    
+    // K8s mode: use platform-specific settings from config
+    if (isK8sMode()) {
+      const k8sConfig = config?.platform?.k8s || {};
+      return {
+        PLATFORM: "k8s",
+        GPU_NODE_SELECTOR_KEY: k8sConfig.gpuNodeSelectorKey || "nvidia.com/gpu.present",
+        GPU_NODE_SELECTOR_VALUE: k8sConfig.gpuNodeSelectorValue || "true",
+        STORAGE_CLASS: k8sConfig.storageClass || "local-path",
+        ...imagePrefixes,
+      };
+    }
+    
+    // EKS mode: use EKS-specific settings
+    const eksConfig = config?.platform?.eks || {};
+    return {
+      PLATFORM: "eks",
+      KARPENTER_PREFIX: EKS_MODE === "auto" ? "eks.amazonaws.com" : "karpenter.k8s.aws",
+      GPU_NODE_SELECTOR_KEY: eksConfig.gpuNodeSelectorKey || "eks.amazonaws.com/instance-family",
+      GPU_NODE_SELECTOR_VALUE: eksConfig.gpuNodeSelectorValue || "g6e",
+      STORAGE_CLASS: eksConfig.storageClass || "efs",
+      ...imagePrefixes,
+    };
+  };
+
   const updateModels = async (models, categoryDir, componentDir) => {
     await setK8sContext();
     const MODELS_DIR = path.join(COMPONENTS_DIR, categoryDir, componentDir);
+    const modelVars = await getModelVars();
     for (const model of models) {
-      const { EKS_MODE } = process.env;
       const modelTemplatePath = path.join(MODELS_DIR, `model-${model.name}.template.yaml`);
       const modelRenderedPath = path.join(MODELS_DIR, `model-${model.name}.rendered.yaml`);
-      let modelVars = {
-        KARPENTER_PREFIX: EKS_MODE === "auto" ? "eks.amazonaws.com" : "karpenter.k8s.aws",
-      };
       renderTemplate(modelTemplatePath, modelRenderedPath, modelVars);
       if (model.deploy) {
         await $`kubectl apply -f ${modelRenderedPath}`;
@@ -82,16 +189,13 @@ const model = (function () {
   const addModels = async (models, categoryDir, componentDir) => {
     await setK8sContext();
     const MODELS_DIR = path.join(COMPONENTS_DIR, categoryDir, componentDir);
+    const modelVars = await getModelVars();
     for (const model of models) {
       if (!model.deploy) {
         continue;
       }
-      const { EKS_MODE } = process.env;
       const modelTemplatePath = path.join(MODELS_DIR, `model-${model.name}.template.yaml`);
       const modelRenderedPath = path.join(MODELS_DIR, `model-${model.name}.rendered.yaml`);
-      let modelVars = {
-        KARPENTER_PREFIX: EKS_MODE === "auto" ? "eks.amazonaws.com" : "karpenter.k8s.aws",
-      };
       renderTemplate(modelTemplatePath, modelRenderedPath, modelVars);
       await $`kubectl apply -f ${modelRenderedPath}`;
     }
@@ -100,23 +204,26 @@ const model = (function () {
   const removeAllModels = async (models, categoryDir, componentDir) => {
     await setK8sContext();
     const MODELS_DIR = path.join(COMPONENTS_DIR, categoryDir, componentDir);
+    const modelVars = await getModelVars();
     for (const model of models) {
-      const { EKS_MODE } = process.env;
       const modelTemplatePath = path.join(MODELS_DIR, `model-${model.name}.template.yaml`);
       const modelRenderedPath = path.join(MODELS_DIR, `model-${model.name}.rendered.yaml`);
-      let modelVars = {
-        KARPENTER_PREFIX: EKS_MODE === "auto" ? "eks.amazonaws.com" : "karpenter.k8s.aws",
-      };
       renderTemplate(modelTemplatePath, modelRenderedPath, modelVars);
       await $`kubectl delete -f ${modelRenderedPath} --ignore-not-found`;
     }
   };
-  return { configureModels, updateModels, addModels, removeAllModels };
+  return { configureModels, updateModels, addModels, removeAllModels, getModelVars };
 })();
 
 // Terraform
 const terraform = (function () {
   const setupWorkspace = async function (TERRAFORM_DIR, options = {}) {
+    // Skip terraform in K8s mode
+    if (isK8sMode()) {
+      console.log("K8s mode: Skipping Terraform setup");
+      return;
+    }
+    
     const requiredEnvVars = ["REGION", "EKS_CLUSTER_NAME", "EKS_MODE"];
     checkRequiredEnvVars(requiredEnvVars);
     const { REGION, EKS_CLUSTER_NAME, EKS_MODE, DOMAIN } = process.env;
@@ -138,6 +245,8 @@ const terraform = (function () {
         for (const [key, value] of Object.entries(vars)) {
           if (Array.isArray(value)) {
             content += `${key} = ${JSON.stringify(value)}\n`;
+          } else if (typeof value === "boolean") {
+            content += `${key} = ${value}\n`;
           } else {
             content += `${key} = "${value}"\n`;
           }
@@ -155,6 +264,10 @@ const terraform = (function () {
   };
 
   const plan = async function (TERRAFORM_DIR, options = {}) {
+    if (isK8sMode()) {
+      console.log("K8s mode: Skipping Terraform plan");
+      return;
+    }
     const { REGION } = process.env;
     try {
       await setupWorkspace(TERRAFORM_DIR, options);
@@ -165,6 +278,10 @@ const terraform = (function () {
   };
 
   const apply = async function (TERRAFORM_DIR, options = {}) {
+    if (isK8sMode()) {
+      console.log("K8s mode: Skipping Terraform apply");
+      return;
+    }
     const { REGION } = process.env;
     try {
       await setupWorkspace(TERRAFORM_DIR, options);
@@ -175,6 +292,10 @@ const terraform = (function () {
   };
 
   const destroy = async function (TERRAFORM_DIR, options = {}) {
+    if (isK8sMode()) {
+      console.log("K8s mode: Skipping Terraform destroy");
+      return;
+    }
     const { REGION } = process.env;
     try {
       await setupWorkspace(TERRAFORM_DIR, options);
@@ -185,6 +306,10 @@ const terraform = (function () {
   };
 
   const output = async function (TERRAFORM_DIR, options = {}) {
+    if (isK8sMode()) {
+      console.log("K8s mode: Skipping Terraform output");
+      return {};
+    }
     try {
       await setupWorkspace(TERRAFORM_DIR, options);
       if (options.outputName) {
@@ -226,6 +351,86 @@ const terraform = (function () {
   return { setupWorkspace, plan, apply, destroy, output, applyWithRetry };
 })();
 
+// Open WebUI API
+const openwebui = (function () {
+  const OPENWEBUI_BASE_URL = "http://openwebui.openwebui:80";
+  const OPENWEBUI_POD_SELECTOR = "app.kubernetes.io/name=openwebui,app.kubernetes.io/component=open-webui";
+
+  const isAvailable = async () => {
+    try {
+      const result = await $`kubectl get pod -n openwebui -l ${OPENWEBUI_POD_SELECTOR} --no-headers --ignore-not-found`.quiet();
+      return result.stdout.includes("Running");
+    } catch {
+      return false;
+    }
+  };
+
+  const getToken = async () => {
+    const email = process.env.OPENWEBUI_ADMIN_EMAIL;
+    const password = process.env.OPENWEBUI_ADMIN_PASSWORD;
+    if (!email || !password) {
+      throw new Error("OPENWEBUI_ADMIN_EMAIL or OPENWEBUI_ADMIN_PASSWORD not set");
+    }
+    const result = await $`kubectl exec -n openwebui statefulset/openwebui -- curl -sf -X POST ${OPENWEBUI_BASE_URL}/api/v1/auths/signin -H "Content-Type: application/json" -d ${JSON.stringify({ email, password })}`.quiet();
+    const data = JSON.parse(result.stdout);
+    if (!data.token) throw new Error("Failed to get Open WebUI auth token");
+    return data.token;
+  };
+
+  const registerFunction = async (token, { id, name, code }) => {
+    // Try to create first, if it already exists, update it
+    try {
+      const createBody = JSON.stringify({ id, name, type: "pipe", content: code, meta: { description: `Auto-registered pipe function for ${name}` } });
+      await $`kubectl exec -n openwebui statefulset/openwebui -- curl -sf -X POST ${OPENWEBUI_BASE_URL}/api/v1/functions/create -H "Content-Type: application/json" -H ${"Authorization: Bearer " + token} -d ${createBody}`.quiet();
+      console.log(`  ✅ Created function: ${name}`);
+    } catch {
+      // Function may already exist, try update
+      const updateBody = JSON.stringify({ name, type: "pipe", content: code, meta: { description: `Auto-registered pipe function for ${name}` } });
+      await $`kubectl exec -n openwebui statefulset/openwebui -- curl -sf -X POST ${OPENWEBUI_BASE_URL}/api/v1/functions/id/${id}/update -H "Content-Type: application/json" -H ${"Authorization: Bearer " + token} -d ${updateBody}`.quiet();
+      console.log(`  ✅ Updated function: ${name}`);
+    }
+  };
+
+  const enableFunction = async (token, id) => {
+    await $`kubectl exec -n openwebui statefulset/openwebui -- curl -sf -X POST ${OPENWEBUI_BASE_URL}/api/v1/functions/id/${id}/toggle -H ${"Authorization: Bearer " + token}`.quiet();
+    console.log(`  ✅ Enabled function: ${id}`);
+  };
+
+  const deleteFunction = async (token, id) => {
+    await $`kubectl exec -n openwebui statefulset/openwebui -- curl -sf -X DELETE ${OPENWEBUI_BASE_URL}/api/v1/functions/id/${id}/delete -H ${"Authorization: Bearer " + token}`.quiet();
+    console.log(`  ✅ Deleted function: ${id}`);
+  };
+
+  const registerAndEnable = async ({ id, name, code }) => {
+    if (!(await isAvailable())) {
+      console.warn("  ⚠️  Open WebUI not available — skipping pipe function registration");
+      return;
+    }
+    try {
+      const token = await getToken();
+      await registerFunction(token, { id, name, code });
+      await enableFunction(token, id);
+    } catch (error) {
+      console.warn(`  ⚠️  Could not register pipe function in Open WebUI: ${error.message}`);
+    }
+  };
+
+  const remove = async (id) => {
+    if (!(await isAvailable())) {
+      console.warn("  ⚠️  Open WebUI not available — skipping pipe function removal");
+      return;
+    }
+    try {
+      const token = await getToken();
+      await deleteFunction(token, id);
+    } catch (error) {
+      console.warn(`  ⚠️  Could not remove pipe function from Open WebUI: ${error.message}`);
+    }
+  };
+
+  return { isAvailable, getToken, registerFunction, enableFunction, deleteFunction, registerAndEnable, remove };
+})();
+
 // Standard Mode Cleanup
 const cleanupStandardModeResources = async () => {
   try {
@@ -256,9 +461,13 @@ const cleanupStandardModeResources = async () => {
 export default {
   init,
   checkRequiredEnvVars,
+  checkHtpasswd,
   setK8sContext,
   renderTemplate,
+  getImagePrefixes,
+  isK8sMode,
   model,
   terraform,
+  openwebui,
   cleanupStandardModeResources,
 };
