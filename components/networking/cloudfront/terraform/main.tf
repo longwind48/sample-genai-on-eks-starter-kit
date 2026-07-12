@@ -15,6 +15,29 @@ variable "expose_litellm_public" {
   default = false
 }
 
+# Cost-allocation tags — defaults mirror terraform/variables.tf so CloudFront/WAF
+# resources carry the same Owner/CostCenter/Project/Environment as the rest of the estate.
+variable "tag_owner" {
+  type    = string
+  default = "ml-platform-team"
+}
+variable "tag_cost_center" {
+  type    = string
+  default = "engineering"
+}
+variable "tag_project" {
+  type    = string
+  default = "flexAI"
+}
+variable "tag_environment" {
+  type    = string
+  default = "dev"
+}
+variable "tag_auto_delete" {
+  type    = string
+  default = "no"
+}
+
 terraform {
   required_providers {
     aws = {
@@ -26,6 +49,17 @@ terraform {
 
 provider "aws" {
   region = var.region
+
+  default_tags {
+    tags = {
+      Owner       = var.tag_owner
+      CostCenter  = var.tag_cost_center
+      Project     = var.tag_project
+      Environment = var.tag_environment
+      auto-delete = var.tag_auto_delete
+      ManagedBy   = "terraform"
+    }
+  }
 }
 
 # --- Discover the live internal litellm ALB by the tags EKS Auto Mode sets ---

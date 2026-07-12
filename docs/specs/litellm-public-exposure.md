@@ -110,7 +110,19 @@ CloudFront `E3MZCN18Z9UBXE` = **https://d1dp7djmfph951.cloudfront.net**, VPC ori
 - ⏳ New models (Fable 5 / gpt-oss / GPT-5.x) NOT yet listed — running pods predate the config/image change. Appear after litellm re-deploy.
 - ⏳ ALB prefix-list lock NOT yet applied (SG still 0.0.0.0/0 on :80 — in-VPC only since ALB is internal). Applied by the re-deploy with `CLOUDFRONT_PREFIX_LIST_ID`.
 
-**Final step (task #5):** `CLOUDFRONT_PREFIX_LIST_ID=pl-3b927c52 BEDROCK_MANTLE_API_KEY=<key> ./cli ai-gateway litellm install`
+**Re-deploy done (2026-07-12) — verified live end-to-end:**
+- Opus 4.8 via `bedrock/` → `OPUS_OK`; Fable 5 + gpt-oss registered
+- GPT-5.5 / GPT-5.4 via `bedrock-mantle/` on the **`/v1/responses`** endpoint, SigV4/Pod Identity → `status: completed`. No API key.
+- Pods on v1.91.3, ALB locked to `pl-3b927c52`, all through CloudFront.
+
+**Runtime gotchas hit + fixed (record for next deploy):**
+1. Image tag format changed: newer litellm publishes `vX.Y.Z` (NOT `main-vX.Y.Z-stable`). Used `v1.91.3`.
+2. litellm-helm upgrade fails on the immutable `litellm-migrations` Job — `kubectl -n litellm delete job litellm-migrations` before re-running.
+3. litellm TF state had drifted (pod-identity policy + association existed but weren't in state) — `terraform import` both before apply.
+4. GPT-5.x is **Responses-API only**: call `/v1/responses`, NOT `/chat/completions` (LiteLLM #30941 — no auto-bridge yet).
+5. mantle needs IAM action **`bedrock-mantle:CreateInference`** (+ `Get*`/`List*`) — distinct from `bedrock:InvokeModel`. Added to the litellm pod-identity policy.
+
+Cost-allocation tags (Owner/CostCenter/Project/Environment/auto-delete/ManagedBy) applied to CloudFront + WAF + VPC origin, matching `terraform/variables.tf` default_tags.
 
 ## Verification (definition of done)
 

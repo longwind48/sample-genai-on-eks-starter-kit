@@ -48,6 +48,18 @@ module "pod_identity" {
         "bedrock:ApplyGuardrail"
       ]
       resources = ["*"]
+    },
+    {
+      # GPT-5.x etc. on the bedrock-mantle endpoint. CreateInference authorizes
+      # both Chat Completions and Responses calls; SigV4 auth (pod IAM) needs no
+      # CallWithBearerToken. Scoped to mantle projects in-account.
+      sid = "BedrockMantleInference"
+      actions = [
+        "bedrock-mantle:CreateInference",
+        "bedrock-mantle:Get*",
+        "bedrock-mantle:List*"
+      ]
+      resources = ["arn:aws:bedrock-mantle:*:*:project/*"]
     }
   ]
   associations = {

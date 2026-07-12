@@ -1,9 +1,11 @@
 replicaCount: 2
 
 image:
-  # Bumped from v1.81.3 to get the bedrock_mantle provider (added 2026-03-05),
-  # required for GPT-5.4/5.5 via the Bedrock Mantle Responses API.
-  tag: main-v1.91.3-stable
+  # Bumped from v1.81.3 to get the bedrock_mantle provider (added 2026-03-05)
+  # + mantle SigV4 auth (v1.87.2), required for GPT-5.4/5.5. Tag format changed:
+  # newer releases publish `vX.Y.Z` (no main- prefix / -stable suffix). Verified
+  # ghcr.io/berriai/litellm-database:v1.91.3 exists.
+  tag: v1.91.3
 
 global:
   security:
