@@ -114,6 +114,24 @@ resource "aws_wafv2_web_acl" "litellm" {
       managed_rule_group_statement {
         name        = "AWSManagedRulesCommonRuleSet"
         vendor_name = "AWS"
+
+        # LLM gateway traffic breaks two generic web-app rules:
+        # - SizeRestrictions_BODY blocks bodies >8KB; Claude Code/Cowork system
+        #   prompts + tool schemas routinely exceed that.
+        # - GenericLFI_BODY false-positives on file paths / code in prompts.
+        # Count (don't block) just these two; the rest of the set still blocks.
+        rule_action_override {
+          name = "SizeRestrictions_BODY"
+          action_to_use {
+            count {}
+          }
+        }
+        rule_action_override {
+          name = "GenericLFI_BODY"
+          action_to_use {
+            count {}
+          }
+        }
       }
     }
     visibility_config {
