@@ -103,11 +103,6 @@ envVars:
   # LITELLM_LOG: DEBUG
   UI_USERNAME: {{{LITELLM_UI_USERNAME}}}
   UI_PASSWORD: {{{LITELLM_UI_PASSWORD}}}
-  {{#if integration.bedrock-mantle.llm.length}}
-  # Bearer key for Bedrock Mantle (GPT-5.x Responses API). Generate a long-term
-  # Bedrock API key in the console. Auth here is a Bearer token, not SigV4.
-  BEDROCK_MANTLE_API_KEY: {{{BEDROCK_MANTLE_API_KEY}}}
-  {{/if}}
   {{#if @root.integration.o11y.langfuse}}
   LANGFUSE_HOST: http://langfuse-web.langfuse:3000
   LANGFUSE_PUBLIC_KEY: {{{LANGFUSE_PUBLIC_KEY}}}
@@ -194,12 +189,15 @@ proxy_config:
         {{/if}}
     {{/each}}
     # Bedrock Mantle Models (GPT-5.x via OpenAI-compatible Responses API).
-    # Different endpoint (/openai/v1) and Bearer auth than bedrock/ above.
+    # Different endpoint (/openai/v1) than bedrock/ above. No api_key: with no
+    # bearer token, LiteLLM (>=v1.87.2) SigV4-signs via the pod's IAM credentials
+    # (EKS Pod Identity) — same role the bedrock/ models use, no static/short-term
+    # key to manage. Requires the litellm image >= v1.87.2 (we pin v1.91.3).
     {{#each integration.bedrock-mantle.llm}}
     - model_name: bedrock-mantle/{{{name}}}
       litellm_params:
         model: bedrock_mantle/{{{model}}}
-        api_key: os.environ/BEDROCK_MANTLE_API_KEY
+        aws_region_name: {{{@root.integration.bedrock-mantle.region}}}
         api_base: https://bedrock-mantle.{{{@root.integration.bedrock-mantle.region}}}.api.aws/openai/v1
     {{/each}}
     # Bedrock Embedding Models

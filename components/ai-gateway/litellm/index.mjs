@@ -127,9 +127,6 @@ export async function install() {
     // Set after the CloudFront edge is deployed to lock the ALB to CloudFront IPs.
     CLOUDFRONT_PREFIX_LIST_ID: process.env.CLOUDFRONT_PREFIX_LIST_ID,
     LITELLM_API_KEY: process.env.LITELLM_API_KEY,
-    // Bedrock long-term API key for the Mantle (GPT-5.x) endpoint. Only needed
-    // when config.bedrock.mantle has models. Bearer auth, not SigV4.
-    BEDROCK_MANTLE_API_KEY: process.env.BEDROCK_MANTLE_API_KEY,
     LITELLM_UI_USERNAME: process.env.LITELLM_UI_USERNAME,
     LITELLM_UI_PASSWORD: process.env.LITELLM_UI_PASSWORD,
     LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,
