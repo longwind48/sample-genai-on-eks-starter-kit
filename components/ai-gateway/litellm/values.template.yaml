@@ -215,6 +215,15 @@ proxy_config:
         aws_region_name: {{{@root.integration.bedrock-mantle.region}}}
         api_base: https://bedrock-mantle.{{{@root.integration.bedrock-mantle.region}}}.api.aws/openai/v1
     {{/each}}
+    # Codex aliases (same mantle endpoint/auth; distinct model_name so Codex
+    # traffic is identifiable in LiteLLM spend logs).
+    {{#each integration.bedrock-mantle.codex}}
+    - model_name: codex/{{{name}}}
+      litellm_params:
+        model: bedrock_mantle/{{{model}}}
+        aws_region_name: {{{@root.integration.bedrock-mantle.region}}}
+        api_base: https://bedrock-mantle.{{{@root.integration.bedrock-mantle.region}}}.api.aws/openai/v1
+    {{/each}}
     # Bedrock Embedding Models
     {{#each integration.bedrock.embedding}}
     - model_name: bedrock/{{{name}}}

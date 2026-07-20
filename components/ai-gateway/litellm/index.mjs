@@ -43,6 +43,8 @@ export async function install() {
   integration["bedrock-mantle"] = {
     region: config["bedrock"]?.["mantle"]?.["region"] || process.env.REGION || "us-east-1",
     llm: config["bedrock"]?.["mantle"]?.["llm"]?.["models"] || [],
+    // Dedicated codex/ aliases so Codex-via-LiteLLM traffic is distinct in spend logs.
+    codex: config["bedrock"]?.["mantle"]?.["codex"]?.["models"] || [],
   };
   for (const [key, value] of Object.entries(config["llm-model"])) {
     integration["llm-model"][key] = {};
