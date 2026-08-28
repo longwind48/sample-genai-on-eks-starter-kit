@@ -115,9 +115,16 @@ export async function install() {
     failure_callback: JSON.stringify(failureCallback),
   };
   if (enableBedrockGuardrail) {
-    const id = await utils.terraform.output(DIR, { outputName: "bedrock_guardrail_id" });
-    const version = await utils.terraform.output(DIR, { outputName: "bedrock_guardrail_version" });
-    integration.guardrail["bedrock"] = { id, version };
+    // Two guardrails: `agentic` is the gateway default (PII + content filters), and
+    // `strict` adds prompt-attack defense but is opt-in per REQUEST because it blocks
+    // agentic clients. Per-key assignment would be neater but is a LiteLLM Enterprise
+    // feature and 403s on OSS. See the comments in main.tf.
+    const agenticId = await utils.terraform.output(DIR, { outputName: "bedrock_guardrail_agentic_id" });
+    const agenticVersion = await utils.terraform.output(DIR, { outputName: "bedrock_guardrail_agentic_version" });
+    integration.guardrail["bedrock"] = { id: agenticId, version: agenticVersion };
+    const strictId = await utils.terraform.output(DIR, { outputName: "bedrock_guardrail_id" });
+    const strictVersion = await utils.terraform.output(DIR, { outputName: "bedrock_guardrail_version" });
+    integration.guardrail["bedrockStrict"] = { id: strictId, version: strictVersion };
   }
   integration.guardrail["guardrailsAI"] = enableGuardrailsAI;
   const valuesTemplatePath = path.join(DIR, "values.template.yaml");

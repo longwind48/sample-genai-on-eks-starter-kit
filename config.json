@@ -116,7 +116,7 @@
     }
   },
   "litellm": {
-    "enableBedrockGuardrail": false,
+    "enableBedrockGuardrail": true,
     "enableGuardrailsAI": false
   },
   "ai-agent": {

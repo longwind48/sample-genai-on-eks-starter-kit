@@ -291,7 +291,18 @@ proxy_config:
     - guardrail_name: "bedrock-guardrail"
       litellm_params:
         guardrail: bedrock
-        mode: "during_call"
+        # pre_call only, and that is deliberate:
+        #   during_call fires concurrently with the LLM call, so the masked messages
+        #     and the block it writes back land after the request is already in
+        #     flight - it evaluates every prompt and intervenes on none of them.
+        #   post_call scans the response, but on the Anthropic /v1/messages route it
+        #     500s every streaming request: bedrock_guardrails.py
+        #     async_post_call_streaming_iterator_hook feeds Anthropic SSE chunks into
+        #     stream_chunk_builder(), which only understands OpenAI chunks ->
+        #     "byte indices must be integers". Claude Desktop/Cowork and Claude Code
+        #     always stream, so post_call takes the whole gateway down for them.
+        #     Re-test on a litellm bump; until then input-side scanning only.
+        mode: ["pre_call"]
         default_on: true
         guardrailIdentifier: "{{{bedrock.id}}}"
         guardrailVersion: "{{{bedrock.version}}}"
@@ -299,11 +310,41 @@ proxy_config:
         aws_region_name: {{{@root.integration.bedrock.region}}}
         {{/if}}
         mask_request_content: true
-        mask_response_content: true
+        # No effect while mode is pre_call only - the response is never scanned.
+        # Kept false so it does not read as working response masking.
+        mask_response_content: false
         experimental_use_latest_role_message_only: true
         skip_system_message_in_guardrail: true
-        disable_exception_on_block: true
-    {{/if}}    
+        # Left off deliberately. With it on, a blocked prompt comes back as HTTP 500
+        # carrying the block message, which reads as a server fault - clients and
+        # litellm_settings.num_retries both retry it, so one blocked prompt costs
+        # several ApplyGuardrail calls. Off, a block is a clean HTTP 400 with the
+        # triggered assessments in the body.
+        disable_exception_on_block: false
+    {{/if}}
+    {{#if bedrockStrict}}
+    # Adds prompt-attack defense on top of the default. default_on is false because
+    # PROMPT_ATTACK blocks agentic clients: they inject persona/behaviour-override
+    # text into the user turn, Bedrock scores it as injection at HIGH confidence, and
+    # a BLOCK pre-empts ANONYMIZE so the request is refused before PII is masked.
+    # Opt in per key for chat-app surfaces:
+    #   POST /key/generate {"metadata": {"guardrails": ["bedrock-guardrail-strict"]}}
+    - guardrail_name: "bedrock-guardrail-strict"
+      litellm_params:
+        guardrail: bedrock
+        mode: ["pre_call"]
+        default_on: false
+        guardrailIdentifier: "{{{bedrockStrict.id}}}"
+        guardrailVersion: "{{{bedrockStrict.version}}}"
+        {{#if @root.integration.bedrock.region}}
+        aws_region_name: {{{@root.integration.bedrock.region}}}
+        {{/if}}
+        mask_request_content: true
+        mask_response_content: false
+        experimental_use_latest_role_message_only: true
+        skip_system_message_in_guardrail: true
+        disable_exception_on_block: false
+    {{/if}}
     {{#if guardrailsAI}}
     - guardrail_name: "guardrails-ai"
       litellm_params:
