@@ -256,7 +256,13 @@ const terraform = (function () {
       if (!!options.vars) {
         addVars(options.vars);
       }
-      fs.writeFileSync(`workspaces/${REGION}/terraform.tfvars`, content);
+      // Read-only callers pass skipTfvars. They have no options.vars, so writing
+      // would drop every var apply() just wrote and leave the file describing a
+      // different infrastructure than the state - the next plan then proposes
+      // destroying or relocating whatever those vars controlled.
+      if (!options.skipTfvars) {
+        fs.writeFileSync(`workspaces/${REGION}/terraform.tfvars`, content);
+      }
       await $`terraform workspace select ${REGION}`;
     } catch (error) {
       throw new Error(error);
@@ -311,7 +317,7 @@ const terraform = (function () {
       return {};
     }
     try {
-      await setupWorkspace(TERRAFORM_DIR, options);
+      await setupWorkspace(TERRAFORM_DIR, { ...options, skipTfvars: true });
       if (options.outputName) {
         const result = await $`terraform output -raw ${options.outputName}`;
         return result.stdout;
