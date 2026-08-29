@@ -88,7 +88,12 @@ export async function install() {
       integration["mcp-servers"].push(serviceName.trim());
     }
   }
-  const callbacks = [],
+  // prometheus is unconditional, unlike the o11y callbacks below. It is not a pod
+  // to discover: the exporter is in-process and the scraper lives outside this
+  // cluster (AMP managed scraper in the observability stack). Enabling it with
+  // nothing scraping costs nothing but an unread /metrics endpoint, whereas
+  // gating it on discovery would mean this file has to know about AMP.
+  const callbacks = ["prometheus"],
     successCallback = [],
     failureCallback = [];
   let result = await $`kubectl get pod -n langfuse -l app=web --ignore-not-found`;

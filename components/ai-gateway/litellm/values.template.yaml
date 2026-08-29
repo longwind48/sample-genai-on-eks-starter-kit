@@ -191,6 +191,33 @@ proxy_config:
     failure_callback: {{{failure_callback}}}
     {{/if}}
     {{/with}}
+    # The AMP managed scraper has no way to present a bearer token, and /metrics
+    # is authenticated by default (401 unauthenticated, and 404 when the callback
+    # is absent, which reads like a missing route rather than a missing callback).
+    # The endpoint exposes counters only, never prompts, and the pod is not
+    # reachable from outside the cluster.
+    require_auth_for_metrics_endpoint: false
+    # Label allowlist, and it is load-bearing rather than tidiness. The default
+    # label set for these metrics is 11-14 wide and includes api_key_hash,
+    # client_ip, user_agent, end_user and user_email. AMP bills per sample
+    # ingested, so leaving those on multiplies series by every key x IP x
+    # user-agent seen. team + model is what the cost dashboard joins on.
+    #
+    # `user` is deliberately NOT here. Per-user series would be
+    # teams x models x users, which is where this stops being cheap. Per-user
+    # spend stays in LiteLLM's own DailyUserSpend table and its UI.
+    prometheus_metrics_config:
+      - group: cost
+        metrics:
+          - litellm_spend_metric
+          - litellm_input_tokens_metric
+          - litellm_output_tokens_metric
+          - litellm_input_cached_tokens_metric
+          - litellm_input_cache_creation_tokens_metric
+        include_labels:
+          - team
+          - team_alias
+          - model
     redact_user_api_key_info: true
     turn_off_message_logging: false
   model_list:
