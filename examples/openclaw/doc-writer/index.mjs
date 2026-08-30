@@ -30,7 +30,10 @@ const PIPE_FUNCTION_NAME = "OpenClaw - Document Writer";
 
 export async function install() {
   // Check required environment variables
-  const requiredEnvVars = ["LITELLM_API_KEY"];
+  // Per-app LiteLLM virtual key, deliberately NOT the gateway master key: an app
+  // pod holding the master key can mint keys and read every other tenant's spend.
+  // The pod-side env var keeps its name; only the value source changes.
+  const requiredEnvVars = ["LITELLM_KEY_OPENCLAW"];
   utils.checkRequiredEnvVars(requiredEnvVars);
 
   // Apply namespace and K8s manifests

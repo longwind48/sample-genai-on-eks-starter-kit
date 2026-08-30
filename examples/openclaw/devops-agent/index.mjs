@@ -30,7 +30,10 @@ const PIPE_FUNCTION_NAME = "OpenClaw - DevOps Agent";
 
 export async function install() {
   // Check required environment variables
-  const requiredEnvVars = ["LITELLM_API_KEY"];
+  // Per-app LiteLLM virtual key, deliberately NOT the gateway master key: an app
+  // pod holding the master key can mint keys and read every other tenant's spend.
+  // The pod-side env var keeps its name; only the value source changes.
+  const requiredEnvVars = ["LITELLM_KEY_OPENCLAW"];
   utils.checkRequiredEnvVars(requiredEnvVars);
 
   // Apply namespace and K8s manifests
@@ -41,7 +44,7 @@ export async function install() {
   const agentRenderedPath = path.join(DIR, "agent.rendered.yaml");
   const agentTemplateString = fs.readFileSync(agentTemplatePath, "utf8");
   const agentTemplate = handlebars.compile(agentTemplateString);
-  const { LITELLM_API_KEY } = process.env;
+  const LITELLM_API_KEY = process.env.LITELLM_KEY_OPENCLAW;
   const agentVars = {
     IMAGE: IMAGE_URL,
     ...config["examples"]["openclaw"]["devops-agent"].env,

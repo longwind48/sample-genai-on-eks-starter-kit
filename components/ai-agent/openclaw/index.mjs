@@ -27,7 +27,10 @@ export async function init(_BASE_DIR, _config, _utils) {
 
 export async function install() {
   // Check required environment variables
-  const requiredEnvVars = ["LITELLM_API_KEY"];
+  // Per-app LiteLLM virtual key, deliberately NOT the gateway master key: an app
+  // pod holding the master key can mint keys and read every other tenant's spend.
+  // The pod-side env var keeps its name; only the value source changes.
+  const requiredEnvVars = ["LITELLM_KEY_OPENCLAW"];
   utils.checkRequiredEnvVars(requiredEnvVars);
 
   // Apply K8s manifests
@@ -39,7 +42,7 @@ export async function install() {
   const renderedPath = path.join(DIR, "openclaw.rendered.yaml");
   const templateString = fs.readFileSync(templatePath, "utf8");
   const template = handlebars.compile(templateString);
-  const { LITELLM_API_KEY } = process.env;
+  const LITELLM_API_KEY = process.env.LITELLM_KEY_OPENCLAW;
   const vars = {
     IMAGE: IMAGE_URL,
     ...config["ai-agent"]["openclaw"].env,

@@ -35,7 +35,11 @@ export async function install() {
   const agentTemplateString = fs.readFileSync(agentTemplatePath, "utf8");
   const agentTemplate = handlebars.compile(agentTemplateString);
   const { useBuildx, arch } = config.docker;
-  const { LITELLM_API_KEY } = process.env;
+  // Fail loudly rather than rendering an empty key into the pod: this var is newer
+  // than LITELLM_API_KEY, so an un-migrated .env would otherwise deploy an agent
+  // that 401s on every call with nothing pointing at the cause.
+  utils.checkRequiredEnvVars(["LITELLM_KEY_STRANDS_AGENT"]);
+  const LITELLM_API_KEY = process.env.LITELLM_KEY_STRANDS_AGENT;
   const agentVars = {
     useBuildx,
     arch,

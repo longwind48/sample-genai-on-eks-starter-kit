@@ -22,7 +22,10 @@ export async function init(_BASE_DIR, _config, _utils) {
 
 export async function install() {
   const OPENWEBUI_CHART_VERSION = "12.8.1";
-  const requiredEnvVars = ["LITELLM_API_KEY", "OPENWEBUI_ADMIN_EMAIL", "OPENWEBUI_ADMIN_PASSWORD"];
+  // Per-app LiteLLM virtual key, deliberately NOT the gateway master key: an app
+  // pod holding the master key can mint keys and read every other tenant's spend.
+  // The pod-side env var keeps its name; only the value source changes.
+  const requiredEnvVars = ["LITELLM_KEY_OPENWEBUI", "OPENWEBUI_ADMIN_EMAIL", "OPENWEBUI_ADMIN_PASSWORD"];
   utils.checkRequiredEnvVars(requiredEnvVars);
 
   await $`helm repo add open-webui https://open-webui.github.io/helm-charts`;
@@ -34,7 +37,7 @@ export async function install() {
   const valuesTemplate = handlebars.compile(valuesTemplateString);
   const valuesVars = {
     DOMAIN: process.env.DOMAIN,
-    LITELLM_API_KEY: process.env.LITELLM_API_KEY,
+    LITELLM_API_KEY: process.env.LITELLM_KEY_OPENWEBUI,
     OPENWEBUI_ADMIN_EMAIL: process.env.OPENWEBUI_ADMIN_EMAIL,
     OPENWEBUI_ADMIN_PASSWORD: process.env.OPENWEBUI_ADMIN_PASSWORD,
   };

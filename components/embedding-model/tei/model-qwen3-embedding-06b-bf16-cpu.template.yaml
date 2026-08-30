@@ -34,7 +34,18 @@ spec:
           args:
             - --model-id=Qwen/Qwen3-Embedding-0.6B
             - --huggingface-hub-cache=/root/.cache/huggingface/hub
-            - --max-batch-tokens=8192
+            # Lowered from 8192, which OOMKilled this pod in a loop (41 restarts in
+            # 5.5h, 2026-08-29). It died in "Warming up model", never under user load:
+            # warmup runs one forward pass sized to this flag, and attention on a
+            # single 8192-token sequence is 8192^2 x 16 heads x 4B ~ 4.3GB of buffer
+            # per layer on the CPU/candle backend, so it blew the 10Gi limit. Raising
+            # the limit would only move the wall; 2048 keeps warmup ~16x cheaper and
+            # is still far above the RAG chunk sizes this serves.
+            - --max-batch-tokens=2048
+            # Pairs with the line above: without it, any single input longer than
+            # max-batch-tokens is rejected outright, so shrinking the batch would
+            # trade a crash loop for hard request failures on long documents.
+            - --auto-truncate
           env:
             - name: HF_TOKEN
               valueFrom:

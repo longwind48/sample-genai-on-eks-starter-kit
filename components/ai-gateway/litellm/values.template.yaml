@@ -39,9 +39,16 @@ image:
 resources:
   requests:
     cpu: 1 
-    memory: 2Gi
+    memory: 3Gi
   limits:
-    memory: 2Gi
+    # Raised 2Gi -> 3Gi. 2Gi was not "a bit tight": a freshly started pod already sits
+    # at ~1.25Gi (63% of the old cap) before serving traffic, leaving ~750Mi of head-
+    # room, and working set climbs ~500Mi over ~17h until PodMemoryNearLimit fires at
+    # 85%. At 3Gi the same peak (~1.8Gi) is 60%, so the warning has somewhere to go.
+    # requests moved with limits to keep the pod Guaranteed QoS, as the chart intends.
+    # If the climb turns out to be unbounded rather than cache warm-up, this only buys
+    # time - the fix would then be a memory profile, not a bigger number.
+    memory: 3Gi
 
 redis:
   enabled: true
@@ -90,9 +97,14 @@ postgresql:
     resources:
       requests:
         cpu: 125m
-        memory: 256Mi
+        memory: 512Mi
       limits:
-        memory: 256Mi
+        # Raised from 256Mi, which OOMKilled this pod (exit 137, 2026-08-29 08:51).
+        # 256Mi was ~94% consumed at idle: two litellm replicas hold connection pools
+        # and store_prompts_in_spend_logs writes full prompts, so the row volume and
+        # WAL churn outgrew the cap. Requests raised too, so the scheduler reserves
+        # what postgres actually holds instead of overcommitting the stateful node.
+        memory: 1Gi
 
 serviceAccount:
   create: true
@@ -177,7 +189,12 @@ proxy_config:
     max_internal_user_budget: 300
     internal_user_budget_duration: 30d
     upperbound_key_generate_params:
-      max_budget: 300
+      # Raised 300 -> 1000 so a per-key budget can exceed the old ceiling: /key/update
+      # enforces this bound too, not just /key/generate, and rejected a $1000 key with
+      # "max_budget is over max limit set in config". Note the check only compares
+      # numbers, so max_budget: null (unlimited) slips past it entirely - this bound
+      # shapes deliberate budgets, it does not stop anyone removing one.
+      max_budget: 1000
       budget_duration: "30d"
       duration: "90d"
     {{#with integration.o11y.config}}
@@ -228,6 +245,28 @@ proxy_config:
         model: bedrock/{{{model}}}
         {{#if @root.integration.bedrock.region}}
         aws_region_name: {{{@root.integration.bedrock.region}}}
+        {{/if}}
+        {{!-- Reasoning on OpenAI models reached through bedrock-runtime.
+
+        litellm <= v1.91.3 has no branch for them, so it maps reasoning_effort to
+        Anthropic's `thinking` and Bedrock 400s ("Unknown parameter: 'thinking'").
+        The gateway-wide drop_params does not catch it, hence additional_drop_params:
+        a client that sends a thinking level gets a normal answer at the model's
+        default effort instead of an error.
+
+        To actually pick an effort, send `reasoning: {"effort": low|medium|high|xhigh}`
+        in the request body - Bedrock's only accepted shape, forwarded verbatim as
+        additionalModelRequestFields. allowed_openai_params is what stops drop_params
+        from swallowing it (verified: 467 -> 1178 output tokens across low -> xhigh;
+        "minimal" is rejected by Bedrock).
+
+        Drop both lines once the image is on a litellm release that carries
+        BerriAI/litellm#38279 (openai.gpt-5* -> reasoning.effort, merged to main
+        2026-08-26, unreleased as of v1.99.0-rc.1) - reasoning_effort then works
+        natively and needs no client-side special-casing. --}}
+        {{#if dropReasoning}}
+        additional_drop_params: ["reasoning_effort"]  # see values.template.yaml
+        allowed_openai_params: ["reasoning"]
         {{/if}}
     {{/each}}
     # Bedrock Mantle Models (GPT-5.x via OpenAI-compatible Responses API).
