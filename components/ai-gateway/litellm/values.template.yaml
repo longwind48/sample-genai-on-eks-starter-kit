@@ -194,7 +194,7 @@ proxy_config:
       # "max_budget is over max limit set in config". Note the check only compares
       # numbers, so max_budget: null (unlimited) slips past it entirely - this bound
       # shapes deliberate budgets, it does not stop anyone removing one.
-      max_budget: 1000
+      max_budget: 2000
       budget_duration: "30d"
       duration: "90d"
     {{#with integration.o11y.config}}

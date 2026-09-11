@@ -93,6 +93,7 @@
         { "name": "gpt-5.6-sol", "model": "global.openai.gpt-5.6-sol", "dropReasoning": true },
         { "name": "gpt-5.6-terra", "model": "global.openai.gpt-5.6-terra", "dropReasoning": true },
         { "name": "gpt-5.6-luna", "model": "global.openai.gpt-5.6-luna", "dropReasoning": true },
+        { "name": "gpt-6-astra", "model": "global.openai.gpt-6-astra", "dropReasoning": true },
         { "name": "gpt-oss-120b", "model": "openai.gpt-oss-120b-1:0" },
         { "name": "gpt-oss-20b", "model": "openai.gpt-oss-20b-1:0" },
         { "name": "llama4-maverick", "model": "us.meta.llama4-maverick-17b-instruct-v1:0" },
