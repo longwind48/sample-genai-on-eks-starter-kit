@@ -1,8 +1,8 @@
 from litellm.integrations.custom_logger import CustomLogger
 
 
-class CodexImageCompatibility(CustomLogger):
-    """Keep image tool results out of Astra's unsupported Converse toolResult.image field."""
+class CodexBedrockCompatibility(CustomLogger):
+    """Adapt Codex image results and compaction requests for Bedrock Astra."""
 
     async def async_pre_call_hook(self, user_api_key_dict, cache, data, call_type):
         if data.get("model") != "bedrock/gpt-6-astra" or not isinstance(data.get("input"), list):
@@ -39,7 +39,17 @@ class CodexImageCompatibility(CustomLogger):
                 image_messages = []
 
         normalized.extend(image_messages)
-        return {**data, "input": normalized} if changed else data
+        adapted = {**data, "input": normalized} if changed else data
+        # Converse requires tool definitions for historical calls even when
+        # Codex disables tools while requesting a compaction summary.
+        if not data.get("tools") and any(item.get("type") == "function_call" for item in data["input"]):
+            adapted = {**adapted, "tools": [{
+                "type": "function",
+                "name": "dummy_tool",
+                "description": "History-only placeholder required by Bedrock. Do not call this tool.",
+                "parameters": {"type": "object", "properties": {}},
+            }]}
+        return adapted
 
 
-proxy_handler_instance = CodexImageCompatibility()
+proxy_handler_instance = CodexBedrockCompatibility()

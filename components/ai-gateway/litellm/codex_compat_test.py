@@ -18,9 +18,12 @@ def result(call_id, output):
     return {"type": "function_call_output", "call_id": call_id, "output": output}
 
 
+def adapt(data):
+    return asyncio.run(proxy_handler_instance.async_pre_call_hook(None, None, data, "aresponses"))
+
+
 def normalize(items, model="bedrock/gpt-6-astra"):
-    data = {"model": model, "input": items}
-    return asyncio.run(proxy_handler_instance.async_pre_call_hook(None, None, data, "aresponses"))["input"]
+    return adapt({"model": model, "input": items})["input"]
 
 
 class ImageToolResultsTest(unittest.TestCase):
@@ -50,11 +53,43 @@ class ImageToolResultsTest(unittest.TestCase):
         ])
         self.assertEqual(items[3]["output"], "done")
 
-    def test_other_models_and_text_only_requests_are_unchanged(self):
+    def test_other_models_and_text_only_inputs_are_unchanged(self):
         images = [call("a"), result("a", [IMAGE])]
         self.assertEqual(normalize(images, "bedrock/claude-sonnet-5"), images)
         text = [call("a"), result("a", "done")]
         self.assertEqual(normalize(text), text)
+
+
+class CompactionToolHistoryTest(unittest.TestCase):
+    def test_missing_or_empty_tools_with_history_get_a_placeholder(self):
+        for tools in [None, []]:
+            with self.subTest(tools=tools):
+                data = {"model": "bedrock/gpt-6-astra", "input": [call("a"), result("a", "done")]}
+                if tools is not None:
+                    data["tools"] = tools
+                before = copy.deepcopy(data)
+                adapted = adapt(data)
+                self.assertEqual(adapted["input"], before["input"])
+                self.assertEqual(data, before)
+                self.assertEqual(len(adapted["tools"]), 1)
+                self.assertEqual(adapted["tools"][0]["type"], "function")
+                self.assertEqual(adapted["tools"][0]["parameters"]["type"], "object")
+
+    def test_existing_tool_definitions_are_preserved(self):
+        data = {
+            "model": "bedrock/gpt-6-astra",
+            "input": [call("a"), result("a", "done")],
+            "tools": [{"type": "function", "name": "view_image", "parameters": {"type": "object"}}],
+        }
+        self.assertIs(adapt(data), data)
+
+    def test_plain_text_and_other_models_do_not_get_tools(self):
+        for data in [
+            {"model": "bedrock/gpt-6-astra", "input": [{"role": "user", "content": "Hello"}]},
+            {"model": "bedrock/claude-sonnet-5", "input": [call("a"), result("a", "done")]},
+        ]:
+            self.assertIs(adapt(data), data)
+            self.assertNotIn("tools", data)
 
 
 if __name__ == "__main__":
