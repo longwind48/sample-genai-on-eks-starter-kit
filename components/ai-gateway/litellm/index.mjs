@@ -3,6 +3,7 @@
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
+import { createHash } from "crypto";
 import handlebars from "handlebars";
 import { $ } from "zx";
 $.verbose = true;
@@ -93,7 +94,7 @@ export async function install() {
   // cluster (AMP managed scraper in the observability stack). Enabling it with
   // nothing scraping costs nothing but an unread /metrics endpoint, whereas
   // gating it on discovery would mean this file has to know about AMP.
-  const callbacks = ["prometheus"],
+  const callbacks = ["prometheus", "codex_compat.proxy_handler_instance"],
     successCallback = [],
     failureCallback = [];
   let result = await $`kubectl get pod -n langfuse -l app=web --ignore-not-found`;
@@ -136,7 +137,10 @@ export async function install() {
   const valuesRenderedPath = path.join(DIR, "values.rendered.yaml");
   const valuesTemplateString = fs.readFileSync(valuesTemplatePath, "utf8");
   const valuesTemplate = handlebars.compile(valuesTemplateString);
+  const codexCompatSource = fs.readFileSync(path.join(DIR, "codex_compat.py"), "utf8");
   const valuesVars = {
+    CODEX_COMPAT_SOURCE: JSON.stringify(codexCompatSource),
+    CODEX_COMPAT_SHA256: createHash("sha256").update(codexCompatSource).digest("hex"),
     DOMAIN: process.env.DOMAIN,
     // Set after the CloudFront edge is deployed to lock the ALB to CloudFront IPs.
     CLOUDFRONT_PREFIX_LIST_ID: process.env.CLOUDFRONT_PREFIX_LIST_ID,

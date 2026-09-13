@@ -1,11 +1,31 @@
 replicaCount: 2
 
 image:
-  # Bumped from v1.81.3 to get the bedrock_mantle provider (added 2026-03-05)
-  # + mantle SigV4 auth (v1.87.2), required for GPT-5.4/5.5. Tag format changed:
-  # newer releases publish `vX.Y.Z` (no main- prefix / -stable suffix). Verified
-  # ghcr.io/berriai/litellm-database:v1.91.3 exists.
-  tag: v1.91.3
+  # Stable release with Codex custom-tool round trips (v1.93) and namespace
+  # tool preservation (v1.98) in the Responses API bridge.
+  tag: v1.100.1
+
+podAnnotations:
+  checksum/codex-compat: "{{{CODEX_COMPAT_SHA256}}}"
+
+volumes:
+  - name: codex-compat
+    configMap:
+      name: litellm-codex-compat
+
+volumeMounts:
+  - name: codex-compat
+    mountPath: /etc/litellm/codex_compat.py
+    subPath: codex_compat.py
+    readOnly: true
+
+extraResources:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: litellm-codex-compat
+    data:
+      codex_compat.py: {{{CODEX_COMPAT_SOURCE}}}
 
 global:
   security:
@@ -273,7 +293,7 @@ proxy_config:
     # Different endpoint (/openai/v1) than bedrock/ above. No api_key: with no
     # bearer token, LiteLLM (>=v1.87.2) SigV4-signs via the pod's IAM credentials
     # (EKS Pod Identity) — same role the bedrock/ models use, no static/short-term
-    # key to manage. Requires the litellm image >= v1.87.2 (we pin v1.91.3).
+    # key to manage. Requires the litellm image >= v1.87.2.
     {{#each integration.bedrock-mantle.llm}}
     - model_name: bedrock-mantle/{{{name}}}
       litellm_params:
