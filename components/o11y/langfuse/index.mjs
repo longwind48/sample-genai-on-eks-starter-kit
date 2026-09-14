@@ -21,6 +21,11 @@ export async function init(_BASE_DIR, _config, _utils) {
 }
 
 export async function install() {
+  // This migration retains v1 storage; its installer must not revive v1 writers.
+  const migrated = await $`helm list --all --namespace langfuse --filter '^langfuse-v2$' -q`;
+  if (migrated.stdout.trim()) {
+    throw new Error('Langfuse v4 migration detected. Use the existing langfuse-v2 release; see MIGRATION.md.');
+  }
   const requiredEnvVars = ["LANGFUSE_USERNAME", "LANGFUSE_PASSWORD", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"];
   utils.checkRequiredEnvVars(requiredEnvVars);
 
@@ -101,6 +106,10 @@ EOF`;
 }
 
 export async function uninstall() {
+  const migrated = await $`helm list --all --namespace langfuse --filter '^langfuse-v2$' -q`;
+  if (migrated.stdout.trim()) {
+    throw new Error('Refusing to delete shared Redis, S3, or retained migration data. See MIGRATION.md.');
+  }
   await $`helm uninstall langfuse --namespace langfuse`;
   await utils.terraform.destroy(DIR);
 }
