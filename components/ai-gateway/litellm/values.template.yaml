@@ -358,6 +358,12 @@ proxy_config:
         model: openai/{{@key}}
         api_key: fake-key
         api_base: http://{{@key}}.tei:80/v1
+      model_info:
+        # Without this the /health probe cannot infer the mode from the custom
+        # model name and falls back to a chat completion, which TEI does not
+        # serve: POST /v1/chat/completions -> 404, so the model is reported
+        # unhealthy forever while /v1/embeddings answers 200. Not a TEI outage.
+        mode: embedding
     {{/each}}
   # MCP Servers
   {{#if integration.mcp-servers.length}}

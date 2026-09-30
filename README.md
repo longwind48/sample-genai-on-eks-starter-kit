@@ -323,7 +323,7 @@ For Bedrock models, the model list hardcoded on config.json.
 "bedrock": {
   "llm": {
     "models": [
-      { "name": "amazon-nova-premier", "model": "us.amazon.nova-premier-v1:0" },
+      { "name": "amazon-nova-2-lite", "model": "global.amazon.nova-2-lite-v1:0" },
       { "name": "claude-4-opus", "model": "us.anthropic.claude-opus-4-20250514-v1:0" },
     ]
   }
