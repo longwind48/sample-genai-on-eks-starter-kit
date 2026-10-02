@@ -193,6 +193,22 @@ proxy_config:
     # VPC deployment: keep serving if the spend DB blips (per LiteLLM prod guide).
     # Only safe because the proxy isn't directly internet-reachable (CloudFront-only).
     allow_requests_on_db_unavailable: true
+    # Without this, GET /health probes every model live, in-request, so its
+    # latency is the max of ~27 concurrent Bedrock calls - a heavy tail. The
+    # blackbox monitor allows 15s and was timing out on 10 of 11 failed probes
+    # (duration pinned at exactly 15.00s, one sample at 14.37s), so the alert
+    # was measuring probe latency, not model health. With background checks on,
+    # /health serves the cached results from the loop and returns in ~ms.
+    background_health_checks: true
+    # 600s, not the 300s default, to hold synthetic invocation volume flat: each
+    # pod runs its own loop (2 x 27 models / 600s ~= the 28-per-5min observed in
+    # /aws/bedrockinvocations today). Dropping to 300s would double it. Sharing
+    # one loop across pods needs use_shared_health_check, which requires
+    # litellm_settings.cache: true - that also switches on LLM response caching,
+    # so it is deliberately not enabled here.
+    # ponytail: interval tuning is the cheap knob; scope with
+    # background_health_check_model_groups if the model list keeps growing.
+    health_check_interval: 600
   litellm_settings:
     drop_params: true
     # Reliability: long Bedrock turns must not surface as client errors. Without
